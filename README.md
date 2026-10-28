@@ -64,7 +64,7 @@ npm run dist     # installers for this computer, into dist/
 npm run icon     # redraws build/icon.png
 ```
 
-Every push builds and tests on both a Mac and a Windows runner. Pushing a `v*` tag attaches
-the installers to a release.
+Pushes to `main` and every pull request build and test on both a Mac and a Windows runner.
+Pushing a `v*` tag attaches the installers to a release.
 
 Built with [Electron](https://www.electronjs.org).
