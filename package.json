@@ -1,8 +1,8 @@
 {
   "name": "critical-path-drill",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Desktop practice sheet for working out a project schedule by hand",
+  "description": "A ten-lesson desktop course on working out a project schedule by hand",
   "license": "MIT",
   "author": "Trenton Taylor",
   "main": "main.js",

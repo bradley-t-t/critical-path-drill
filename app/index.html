@@ -6,317 +6,836 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Critical Path Drill</title>
 <style>
-/* Layout: one column; short instructions, the network chart you type into, a hint panel underneath */
 :root{
   color-scheme:light;
-  --bg:#f6f7f9; --panel:#ffffff; --fg:#1b2330; --muted:#5d6878; --line:#9aa5b4;
-  --accent:#1f5fbf; --crit:#c0352b; --critbg:#fbe9e7; --ok:#1e7a46; --okbg:#d9f2e3; --bad:#b3261e; --badbg:#fde0dc; --e0:#2463c9;--e1:#c96a00;--e2:#7a3fc4;--e3:#0f8a8a;--e4:#8a5a2b;--e5:#c23b8a;
+  --bg:#f3f5f8; --panel:#ffffff; --sunk:#eef1f6; --fg:#16202e; --muted:#5f6b7c; --line:#d3dae4; --hard:#8d98a8;
+  --accent:#1f5fbf; --accent-soft:#e7eefb; --on-accent:#ffffff;
+  --crit:#c0352b; --critbg:#fbe9e7; --ok:#1a7a46; --okbg:#e2f5ea; --bad:#b3261e; --badbg:#fdeae8;
+  --e0:#2463c9;--e1:#b25f00;--e2:#7a3fc4;--e3:#0f7f7f;--e4:#8a5a2b;--e5:#b8367f;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#12161c; --panel:#1b2129; --fg:#e4e8ee; --muted:#9aa5b4; --line:#566273;
-  --accent:#7fb0ff; --crit:#ff8a7a; --critbg:#3a1f1c; --ok:#6fd49a; --okbg:#173325; --bad:#ff8a80; --badbg:#3d1c1a; --e0:#7fb0ff;--e1:#ffb35c;--e2:#c39bff;--e3:#5fd3d3;--e4:#d6a26d;--e5:#ff8ccc; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#12161c; --panel:#1b2129; --fg:#e4e8ee; --muted:#9aa5b4; --line:#566273;
-  --accent:#7fb0ff; --crit:#ff8a7a; --critbg:#3a1f1c; --ok:#6fd49a; --okbg:#173325; --bad:#ff8a80; --badbg:#3d1c1a; --e0:#7fb0ff;--e1:#ffb35c;--e2:#c39bff;--e3:#5fd3d3;--e4:#d6a26d;--e5:#ff8ccc; color-scheme:dark}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
-main{max-width:1250px;margin:0 auto;display:grid;gap:14px}
-h1{font-size:22px;margin:0}
-p{margin:0}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1319; --panel:#171d25; --sunk:#121820; --fg:#e6eaf0; --muted:#98a3b3; --line:#2b3542; --hard:#64718199;
+  --accent:#7fb0ff; --accent-soft:#1b2838; --on-accent:#0f1319;
+  --crit:#ff8a7a; --critbg:#3a1f1c; --ok:#6fd49a; --okbg:#14301f; --bad:#ff8a80; --badbg:#3b1b19;
+  --e0:#7fb0ff;--e1:#ffb35c;--e2:#c39bff;--e3:#5fd3d3;--e4:#d6a26d;--e5:#ff8ccc;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+  color-scheme:dark}}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:flex;flex-direction:column;min-height:100vh}
+h1,h2,h3,p,ul,ol{margin:0}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- frame ---- */
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:12px max(20px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.rail{display:flex;align-items:center;gap:0;flex:1;min-width:280px;overflow-x:auto;padding:2px 0}
+.step{display:flex;align-items:center;gap:0;flex:0 0 auto}
+.step i{display:block;width:22px;height:2px;background:var(--line)}
+.step.done i,.step.now i{background:var(--accent)}
+.step button{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);
+  color:var(--muted);font-size:12px;font-weight:650;line-height:1;display:grid;place-items:center;padding:0;
+  transition:background .12s,border-color .12s,color .12s}
+.step button[data-state="done"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.step button[data-state="now"]{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.step button[data-state="locked"]{cursor:default;opacity:.55}
+main{flex:1;width:100%;max-width:1280px;margin:0 auto;padding:22px max(20px,env(safe-area-inset-left,0px)) 28px}
+footer{border-top:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:13px;
+  padding:10px max(20px,env(safe-area-inset-left,0px));display:flex;justify-content:space-between;align-items:center;gap:12px}
+.link{background:none;border:0;color:var(--muted);text-decoration:underline;padding:4px;font-size:13px}
+.link:hover{color:var(--fg)}
+
+/* ---- cards and type ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:22px 24px}
+.stack{display:grid;gap:18px}
+.eyebrow{font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h2{font-size:23px;letter-spacing:-.015em;margin-top:4px}
+.prose{max-width:66ch;display:grid;gap:12px;margin-top:14px;color:var(--fg)}
+.prose b{font-weight:650}
+.rule{background:var(--sunk);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;font-size:15px}
+.rule code{font:600 15px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent)}
 .muted{color:var(--muted)}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-button{font:inherit;cursor:pointer;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px 12px}
-button.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
-button:focus-visible,input:focus{outline:2px solid var(--accent);outline-offset:1px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
-.seg button{border:0;border-radius:0}
-.seg button[aria-pressed="true"]{background:var(--accent);color:var(--bg)}
-.steps{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;font-size:14px}
-.steps ol{margin:4px 0 0;padding-left:20px}
-.wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
-#chart{position:relative}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.spread{justify-content:space-between}
+
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:9px 16px;font-weight:550;
+  transition:background .12s,border-color .12s}
+.btn:hover{border-color:var(--hard)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* ---- the chart ---- */
+.board{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+  padding:8px;overflow-x:auto}
+.fit{position:relative;margin:0 auto}
+#chart{position:relative;transform-origin:top left}
 #chart svg{position:absolute;inset:0;pointer-events:none}
 #chart path.edge{transition:opacity .15s}
-#chart.focus path.edge{opacity:.15}
+#chart.focus path.edge{opacity:.16}
 #chart.focus path.edge.hi{opacity:1;stroke-width:3.5}
 @media (prefers-reduced-motion:reduce){#chart path.edge{transition:none}}
-.node{position:absolute;display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:42px 32px 42px;border:2px solid var(--fg);background:var(--panel)}
-.node>*{border-right:1px solid var(--fg);border-bottom:1px solid var(--fg);display:flex;flex-direction:column;align-items:stretch;justify-content:center;text-align:center;font-variant-numeric:tabular-nums;min-width:0}
-.node .lbl{font-size:10px;line-height:12px;letter-spacing:.04em;color:var(--muted);padding-top:2px;pointer-events:none}
-.node .dur span:last-child{flex:1;display:flex;align-items:center;justify-content:center}
+
+.node{position:absolute;display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:40px 32px 40px;
+  border:1.5px solid var(--fg);border-radius:6px;background:var(--panel);overflow:hidden}
+.node>*{border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;
+  justify-content:center;text-align:center;font-variant-numeric:tabular-nums;min-width:0}
 .node>*:nth-child(3n){border-right:0}
 .node>*:nth-child(n+7){border-bottom:0}
-.node input{width:100%;flex:1;min-height:0;border:0;border-radius:0;text-align:center;font:inherit;font-size:15px;background:transparent;color:var(--fg);padding:0}
-.node input::placeholder{color:var(--muted);font-size:10px;letter-spacing:.04em}
-.node input.ok{background:var(--okbg);color:var(--ok);font-weight:700}
-.node input.bad{background:var(--badbg);color:var(--bad);font-weight:700}
-.node .dur{font-weight:700}
-.node .name{grid-column:1/4;align-items:center;font-weight:700;font-size:16px;cursor:pointer;user-select:none;border-right:0}
+.lbl{font-size:9px;line-height:11px;letter-spacing:.06em;color:var(--muted);padding-top:3px;pointer-events:none}
+.val{flex:1;display:flex;align-items:center;justify-content:center;font-size:15px}
+.cell.given .val{font-weight:600}
+.cell.blank{background:var(--sunk)}
+.cell.blank .lbl{opacity:.4}
+.cell.teach{background:var(--accent-soft)}
+.cell.teach .lbl{color:var(--accent)}
+.node input{width:100%;flex:1;min-height:0;border:0;border-radius:0;text-align:center;font:inherit;font-size:15px;
+  background:transparent;color:var(--fg);padding:0}
+.node input:focus{outline:2px solid var(--accent);outline-offset:-2px}
+.node input.ok{background:var(--okbg);color:var(--ok);font-weight:650}
+.node input.bad{background:var(--badbg);color:var(--bad);font-weight:650}
+.node .dur{font-weight:650;background:var(--sunk)}
+.node .name{grid-column:1/4;align-items:center;justify-content:center;font-weight:650;font-size:16px;border-right:0;
+  flex-direction:row}
+.node.pickable .name{cursor:pointer}
+.node.pickable .name:hover{background:var(--sunk)}
 .node.marked{border-color:var(--crit);box-shadow:0 0 0 2px var(--crit)}
 .node.marked .name{background:var(--critbg);color:var(--crit)}
-#hint{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-height:48px}
-#hint.ok{border-color:var(--ok)}
-#hint.bad{border-color:var(--bad)}
-#hint b{font-size:16px}
-#score{font-weight:600}
-.mix{margin-top:10px;padding:10px 12px;border:2px dashed var(--accent);border-radius:6px}
-.mix table{border-collapse:collapse;margin-top:6px;font-size:14px}
-.mix td,.mix th{border:1px solid var(--line);padding:3px 8px;text-align:left}
-.mix tr.you td{font-weight:700;color:var(--accent)}
-.legend{display:inline-grid;grid-template-columns:repeat(3,auto);border:1px solid var(--line);font-size:12px}
-.legend span{padding:2px 8px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center}
-.legend span:nth-child(3n){border-right:0}.legend span:nth-child(n+4){border-bottom:0}
+
+/* ---- feedback ---- */
+#hint{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px 18px;min-height:56px;
+  box-shadow:var(--shadow);display:grid;gap:8px;align-content:start}
+#hint.ok{border-color:var(--ok);background:var(--okbg)}
+#hint.bad{border-color:var(--bad);background:var(--badbg)}
+#hint .head{font-weight:650;font-size:16px}
+#hint p{font-size:14.5px}
+.mix{border:1px dashed var(--accent);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.mix table{border-collapse:collapse;margin-top:8px;font-size:14px}
+.mix td,.mix th{border:1px solid var(--line);padding:4px 10px;text-align:left}
+.mix tr.you td{font-weight:650;color:var(--accent)}
+.meter{height:6px;border-radius:999px;background:var(--sunk);overflow:hidden;min-width:120px;flex:1;max-width:260px}
+.meter span{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .2s}
+.legend{display:inline-grid;grid-template-columns:repeat(3,auto);border:1px solid var(--line);border-radius:6px;
+  overflow:hidden;font-size:11px;color:var(--muted)}
+.legend span{padding:3px 9px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center}
+.legend span:nth-child(3n){border-right:0}
+.legend span:nth-child(n+4){border-bottom:0}
+.done-mark{font-size:34px;line-height:1}
 </style>
 </head>
 <body>
 
-<main>
-  <div>
-    <h1>Critical Path Drill</h1>
-    <p class="muted">Type your answers straight into the boxes. Each one turns green or red when you leave it, and red ones tell you the rule to fix it.</p>
-  </div>
+<header>
+  <div class="brand">Critical Path Drill</div>
+  <nav class="rail" id="rail" aria-label="Lessons"></nav>
+</header>
 
-  <div class="row">
-    <span>Method:</span>
-    <div class="seg" id="mode">
-      <button data-m="0" aria-pressed="true">Zero-day (start at 0)</button>
-      <button data-m="1" aria-pressed="false">One-day (start at 1, ±1)</button>
-    </div>
-    <button id="newp">New problem</button>
-    <button id="hardp">Harder problem</button>
-    <button id="example">Video example</button>
-    <button id="reset">Clear answers</button>
-  </div>
+<main id="view"></main>
 
-  <div class="steps">
-    <div class="row" style="justify-content:space-between">
-      <b>Order to work in</b>
-      <span class="legend"><span>ES</span><span>Dur</span><span>EF</span><span style="grid-column:1/4;border-right:0">Activity</span><span>LS</span><span>Float</span><span>LF</span></span>
-    </div>
-    <ol>
-      <li><b>Forward pass</b> left to right: fill ES and EF in the top row.</li>
-      <li><b>Backward pass</b> right to left: fill LF and LS in the bottom row.</li>
-      <li><b>Float</b> = LS − ES. Zero float means critical.</li>
-      <li><b>Critical path:</b> click the activity names on it, then press Check critical path.</li>
-    </ol>
-  </div>
-
-  <div class="wrap"><div id="chart"></div></div>
-
-  <div class="row">
-    <button class="primary" id="checkCP">Check critical path</button>
-    <span id="score"></span>
-  </div>
-  <div id="hint" aria-live="polite">Click a box to start. Tip: begin with the ES of the first activity.</div>
-</main>
+<footer>
+  <span id="tally"></span>
+  <button class="link" id="reset">Start the course over</button>
+</footer>
 
 <script>
-const EX=[["A",3,""],["B",4,"A"],["C",5,"A"],["D",8,"B"],["E",5,"C"],["F",4,"C"],["G",1,"D,E"],["H",2,"G,F"]];
-var acts=EX, off=0, R=null, R2=null;
-const marked=new Set();
-const $=id=>document.getElementById(id);
-const FIELDS=["es","ef","ls","tf","lf"];
-const LABEL={es:"ES",ef:"EF",ls:"LS",lf:"LF",tf:"Float"};
+"use strict"
 
-function solve(off=window.off){
-  const by={};
-  acts.forEach(([n,d,p])=>by[n]={n,d,pred:p?p.split(","):[],succ:[]});
-  for(const k in by)by[k].pred.forEach(p=>by[p].succ.push(k));
-  const order=Object.keys(by); // activities are listed in dependency order
-  for(const k of order){const a=by[k];a.es=a.pred.length?Math.max(...a.pred.map(p=>by[p].ef))+off:off;a.ef=a.es+a.d-off;}
-  const end=Math.max(...order.map(k=>by[k].ef));
-  for(const k of [...order].reverse()){const a=by[k];a.lf=a.succ.length?Math.min(...a.succ.map(s=>by[s].ls))-off:end;a.ls=a.lf-a.d+off;a.tf=a.ls-a.es;}
-  return {by,order,end};
+/* ------------------------------------------------------------------ *
+ * A schedule is a list of [name, duration, "predecessors"].
+ * solve() runs the forward and backward pass over one, in whichever
+ * way of counting days the lesson is using:
+ *   off = 0  days are points in time, so nothing is added or subtracted
+ *   off = 1  days are whole working days, so the ±1 shows up everywhere
+ * ------------------------------------------------------------------ */
+function solve (acts, off) {
+  const by = {}
+  acts.forEach(([n, d, p]) => { by[n] = { n, d, pred: p ? p.split(',') : [], succ: [] } })
+  for (const k in by) by[k].pred.forEach(p => by[p].succ.push(k))
+  const order = Object.keys(by)
+  for (const k of order) {
+    const a = by[k]
+    a.es = a.pred.length ? Math.max(...a.pred.map(p => by[p].ef)) + off : off
+    a.ef = a.es + a.d - off
+  }
+  const end = Math.max(...order.map(k => by[k].ef))
+  for (const k of [...order].reverse()) {
+    const a = by[k]
+    a.lf = a.succ.length ? Math.min(...a.succ.map(s => by[s].ls)) - off : end
+    a.ls = a.lf - a.d + off
+    a.tf = a.ls - a.es
+  }
+  return { by, order, end, critical: order.filter(k => by[k].tf === 0) }
 }
 
-// Hints name the rule and which boxes to look at, never the answer.
-function hint(k,f){
-  const a=R.by[k],o=off,m=o?"one-day":"zero-day";
-  const chk=" Make sure the boxes it depends on are green first.";
-  switch(f){
-    case "es": return a.pred.length
-      ? (a.pred.length>1?`${k} has more than one predecessor (${a.pred.join(", ")}). Compare their EFs and use the <i>largest</i>, not the smallest.`:`Look at the EF of ${a.pred[0]}.`)+(o?" In the one-day method, add 1.":" In the zero-day method, don't add anything.")+chk
-      : `${k} is a start activity. Think about which day the ${m} method starts on.`;
-    case "ef": return `EF comes from this box's ES and Duration.`+(o?" In the one-day method, remember to subtract 1.":" In the zero-day method, there's no ±1.")+chk;
-    case "lf": return a.succ.length
-      ? (a.succ.length>1?`${k} has more than one successor (${a.succ.join(", ")}). Compare their LSs and use the <i>smallest</i>, not the largest.`:`Look at the LS of ${a.succ[0]}.`)+(o?" In the one-day method, subtract 1.":" In the zero-day method, don't subtract anything.")+chk
-      : `${k} is the last activity. Its LF matches one of the other numbers in its own box.`;
-    case "ls": return `LS comes from this box's LF and Duration, working backwards.`+(o?" In the one-day method, remember to add 1.":" In the zero-day method, there's no ±1.")+chk;
-    case "tf": return `Float compares the late start with the early start in this box.`+chk;
+const LABEL = { es: 'ES', ef: 'EF', ls: 'LS', lf: 'LF', tf: 'Float' }
+const NAMES = { es: 'earliest start', ef: 'earliest finish', ls: 'latest start', lf: 'latest finish', tf: 'float' }
+const FORWARD = ['es', 'ef']
+const BACKWARD = ['ls', 'lf']
+
+/* ---------------------------- problems ---------------------------- */
+const letter = i => String.fromCharCode(65 + i)
+const roll = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1))
+
+const SHAPES = {
+  line: () => [0, 1, 2].map(i => [letter(i), roll(2, 9), i ? letter(i - 1) : '']),
+  merge: () => [['A', roll(2, 9), ''], ['B', roll(2, 9), 'A'], ['C', roll(2, 9), 'A'], ['D', roll(2, 9), 'B,C']],
+  join: () => [['A', roll(2, 9), ''], ['B', roll(2, 9), 'A'], ['C', roll(2, 9), 'A'],
+    ['D', roll(2, 9), 'B,C'], ['E', roll(2, 9), 'D']],
+  split: () => [['A', roll(2, 9), ''], ['B', roll(2, 9), 'A'], ['C', roll(2, 9), 'B'],
+    ['D', roll(2, 9), 'B'], ['E', roll(2, 9), 'C,D']],
+  web: () => grown(6 + Math.floor(Math.random() * 3), 8, 3),
+  big: () => grown(10 + Math.floor(Math.random() * 4), 12, 5)
+}
+
+// A random schedule: every task hangs off one or two of the few before it, and anything
+// left dangling is wired into the last task so the whole thing ends in one place.
+function grown (n, maxDur, reach) {
+  const list = []
+  for (let i = 0; i < n; i++) {
+    const pred = []
+    if (i >= 2) {
+      const want = Math.random() < .45 ? 2 : 1
+      const pool = []
+      for (let j = Math.max(0, i - reach); j < i; j++) pool.push(j)
+      while (pred.length < want && pool.length) pred.push(letter(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]))
+    } else if (i === 1) pred.push('A')
+    list.push([letter(i), roll(1, maxDur), pred.sort().join(',')])
+  }
+  const used = new Set(list.flatMap(a => a[2].split(',').filter(Boolean)))
+  const last = list[list.length - 1]
+  const loose = list.slice(0, -1).filter(a => !used.has(a[0])).map(a => a[0])
+  last[2] = [...new Set([...last[2].split(',').filter(Boolean), ...loose])].sort().join(',')
+  return list
+}
+
+// The zero-float tasks have to form one unbroken chain, or "the critical path" would
+// be two answers at once.
+function oneChain (r) {
+  const c = r.critical
+  for (let i = 0; i < c.length - 1; i++) if (!r.by[c[i]].succ.includes(c[i + 1])) return false
+  return c.length > 1
+}
+
+function problemFor (stage) {
+  for (let i = 0; i < 400; i++) {
+    const acts = SHAPES[stage.shape]()
+    const r = solve(acts, stage.off)
+    if (!r.order.some(k => r.by[k].tf > 0)) continue          // a problem with no slack teaches nothing
+    if (!oneChain(r)) continue
+    if (stage.fields.includes('tf') && r.order.filter(k => r.by[k].tf > 0).length < 2) continue
+    return acts
+  }
+  return SHAPES[stage.shape]()
+}
+
+/* ----------------------------- lessons ---------------------------- */
+const STAGES = [
+  {
+    id: 'forward-line',
+    title: 'Earliest start and finish',
+    shape: 'line', off: 0, fields: FORWARD, pick: false, problems: 2,
+    lesson: [
+      'Every task gets a box. The duration sits in the middle of the top row, and the name across the middle. The four corners are the four dates you work out: the <b>earliest</b> it can start and finish along the top, the <b>latest</b> it can start and finish along the bottom.',
+      'Start at the left and work right. The first task has nothing in front of it, so its earliest start is day <b>0</b>. Add the duration and you have its earliest finish. The next task can begin the moment the one before it ends, so its earliest start is that same number.'
+    ],
+    rule: 'earliest start = the finish of the task before it &nbsp;·&nbsp; earliest finish = earliest start + duration',
+    ask: 'Fill in the earliest start and earliest finish for each task, left to right.',
+    takeaway: 'Working left to right gives you the earliest each task can possibly happen.'
+  },
+  {
+    id: 'forward-merge',
+    title: 'When two paths meet',
+    shape: 'merge', off: 0, fields: FORWARD, pick: false, problems: 2,
+    lesson: [
+      'Here two tasks run side by side and both feed the last one. It cannot begin until <b>both</b> are done, so it has to wait for whichever finishes later.',
+      'When several arrows point into a task, compare the earliest finishes they bring you and take the <b>largest</b>. Taking the smallest is the single most common slip on the forward pass.'
+    ],
+    rule: 'two or more arrows in &nbsp;→&nbsp; earliest start = the <b>largest</b> earliest finish feeding it',
+    ask: 'Fill in the earliest start and earliest finish. Where arrows meet, take the larger one.',
+    takeaway: 'Where paths meet, the later one sets the pace.'
+  },
+  {
+    id: 'backward-line',
+    title: 'Latest start and finish',
+    shape: 'line', off: 0, fields: BACKWARD, pick: false, problems: 2,
+    lesson: [
+      'Now turn around. The top row is filled in for you; the bottom row asks how late each task could run without pushing the whole project out.',
+      'The last task has no slack at the end, so its latest finish is the same as its earliest finish: the project end date. Take the duration back off to get its latest start, and that number becomes the deadline for the task before it.'
+    ],
+    rule: 'last task: latest finish = its earliest finish &nbsp;·&nbsp; latest start = latest finish − duration',
+    ask: 'Fill in the latest start and latest finish for each task, right to left.',
+    takeaway: 'Working right to left gives you the last moment each task can happen.'
+  },
+  {
+    id: 'backward-split',
+    title: 'When one path splits',
+    shape: 'split', off: 0, fields: BACKWARD, pick: false, problems: 2,
+    lesson: [
+      'This time one task feeds two. Going backwards, it has to be finished in time for <b>both</b> of them, so the one that needs to start soonest sets its deadline.',
+      'When several arrows leave a task, compare the latest starts they send back and take the <b>smallest</b>. It is the mirror image of the forward pass, where you took the largest.'
+    ],
+    rule: 'two or more arrows out &nbsp;→&nbsp; latest finish = the <b>smallest</b> latest start after it',
+    ask: 'Fill in the latest start and latest finish. Where a task feeds two, take the smaller one.',
+    takeaway: 'Where paths split, the earliest deadline wins.'
+  },
+  {
+    id: 'float',
+    title: 'Float: how much slack a task has',
+    shape: 'join', off: 0, fields: ['tf'], pick: false, problems: 2,
+    lesson: [
+      'Both passes are filled in for you. Float is the gap between them: how many days a task could slip before the finish date moves.',
+      'Subtract the earliest start from the latest start, in the same box. A task that has to start the moment it can has no room at all, and its float is <b>0</b>.'
+    ],
+    rule: 'float = latest start − earliest start &nbsp;(the same answer as latest finish − earliest finish)',
+    ask: 'Fill in the float for every task.',
+    takeaway: 'Float is slack. Zero float means the task has none.'
+  },
+  {
+    id: 'critical',
+    title: 'The critical path',
+    shape: 'join', off: 0, fields: [], pick: true, problems: 2,
+    lesson: [
+      'Every number is filled in. The tasks with <b>no float</b> form an unbroken chain from the start of the project to the end, and that chain is the critical path.',
+      'It is the longest route through the schedule, and it decides how long the whole project takes. Delay anything on it by a day and the project ends a day later. Delay a task with float and, up to its float, nothing moves.'
+    ],
+    rule: 'critical path = the chain of tasks whose float is 0',
+    ask: 'Click the name of every task with no float, then check your answer.',
+    takeaway: 'The critical path sets the length of the project.'
+  },
+  {
+    id: 'whole',
+    title: 'A whole schedule, start to finish',
+    shape: 'web', off: 0, fields: [...FORWARD, ...BACKWARD, 'tf'], pick: true, problems: 2,
+    lesson: [
+      'Nothing new to learn here: this is all four steps on a real schedule, in order.',
+      'Forward pass across the top row, left to right. Backward pass across the bottom row, right to left. Float in the middle. Then mark the chain with no float.'
+    ],
+    rule: 'forward &nbsp;→&nbsp; backward &nbsp;→&nbsp; float &nbsp;→&nbsp; critical path',
+    ask: 'Fill in all six numbers for every task, then mark the critical path.',
+    takeaway: 'Same four steps every time, however the diagram is drawn.'
+  },
+  {
+    id: 'bigger',
+    title: 'Bigger schedules',
+    shape: 'big', off: 0, fields: [...FORWARD, ...BACKWARD, 'tf'], pick: true, problems: 2,
+    lesson: [
+      'Ten or more tasks, with longer durations and tasks that pull from three others at once. The method does not change; there is just more of it.',
+      'Keep to the order. Finish the whole forward pass before you turn around, or you will be guessing at numbers that are not there yet.'
+    ],
+    rule: 'finish the forward pass everywhere before you start the backward pass',
+    ask: 'Fill in all six numbers for every task, then mark the critical path.',
+    takeaway: 'Size changes nothing. Work the passes in order and the numbers come out.'
+  },
+  {
+    id: 'one-day',
+    title: 'Counting whole working days',
+    shape: 'join', off: 1, fields: [...FORWARD, ...BACKWARD, 'tf'], pick: true, problems: 2,
+    lesson: [
+      'So far a task that ends at 3 handed over at 3, as if the number were a moment on a clock. Many classes and exams count in whole working days instead: a task that finishes <b>on</b> day 3 has used day 3 up, so the next one starts on day 4.',
+      'That is the only difference, and it shows up as a <b>±1</b>. Projects now start on day 1, and the four rules each gain or lose a day. If you put in an answer that belongs to the other way of counting, the drill will show you both rules side by side.'
+    ],
+    rule: 'first task starts at <b>1</b> &nbsp;·&nbsp; earliest finish = earliest start + duration <b>− 1</b> &nbsp;·&nbsp; next earliest start = earliest finish <b>+ 1</b> &nbsp;·&nbsp; latest start = latest finish − duration <b>+ 1</b>',
+    ask: 'Same schedule, counted in whole working days. Watch the ±1.',
+    takeaway: 'Whole working days shift every number by one, and nothing else.'
+  },
+  {
+    id: 'exam',
+    title: 'Exam pace',
+    shape: 'big', off: 1, fields: [...FORWARD, ...BACKWARD, 'tf'], pick: true, problems: 3,
+    lesson: [
+      'Last stage: big schedules, counted in whole working days, three in a row.',
+      'This is what a question on a test looks like. No new rules — just the four steps, carefully, on a diagram you have not seen before.'
+    ],
+    rule: 'forward &nbsp;→&nbsp; backward &nbsp;→&nbsp; float &nbsp;→&nbsp; critical path, in whole working days',
+    ask: 'Fill in all six numbers for every task, then mark the critical path.',
+    takeaway: 'You can take a schedule you have never seen and work it start to finish.'
+  }
+]
+
+/* ---------------------------- progress ---------------------------- */
+const KEY = 'critical-path-drill/progress/1'
+const fresh = () => ({ stage: 0, solved: 0, total: 0, view: 'lesson' })
+let state = fresh()
+
+function load () {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || 'null')
+    if (saved && typeof saved.stage === 'number' && saved.stage >= 0 && saved.stage < STAGES.length) {
+      state = Object.assign(fresh(), saved)
+    }
+  } catch (e) { /* a browser with storage switched off still gets the course, just not the memory */ }
+}
+function save () {
+  try { localStorage.setItem(KEY, JSON.stringify(state)) } catch (e) {}
+}
+
+/* ------------------------------ view ------------------------------ */
+const $ = id => document.getElementById(id)
+const stage = () => STAGES[state.stage]
+let acts = null, R = null, other = null, marked = new Set(), checked = false
+
+function railHTML () {
+  return STAGES.map((s, i) => {
+    const st = i < state.stage ? 'done' : i === state.stage ? 'now' : 'locked'
+    const label = `Lesson ${i + 1}: ${s.title}`
+    return `<span class="step ${st}">${i ? '<i></i>' : ''}` +
+      `<button data-go="${i}" data-state="${st}" title="${label}" aria-label="${label}"` +
+      `${st === 'locked' ? ' disabled' : ''}>${st === 'done' ? '✓' : i + 1}</button></span>`
+  }).join('')
+}
+
+function paint () {
+  $('rail').innerHTML = railHTML()
+  const s = stage()
+  $('tally').textContent = `Lesson ${state.stage + 1} of ${STAGES.length} · ` +
+    `${state.solved} of ${s.problems} solved here · ${state.total} in all`
+  save()
+}
+
+function lessonView () {
+  state.view = 'lesson'
+  const s = stage()
+  acts = problemFor(s)
+  R = solve(acts, s.off)
+  $('view').innerHTML = `<div class="stack">
+    <div class="card">
+      <div class="eyebrow">Lesson ${state.stage + 1} of ${STAGES.length}</div>
+      <h2>${s.title}</h2>
+      <div class="prose">${s.lesson.map(p => `<p>${p}</p>`).join('')}
+        <div class="rule">${s.rule}</div></div>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="row spread">
+      <span class="muted">A worked example. The highlighted boxes are what this lesson is about.</span>
+      <button class="btn primary" id="go">Start practising</button>
+    </div>
+  </div>`
+  drawChart('lesson')
+  $('go').onclick = practiceView
+  paint()
+}
+
+function practiceView () {
+  state.view = 'practice'
+  const s = stage()
+  acts = problemFor(s)
+  R = solve(acts, s.off)
+  other = solve(acts, 1 - s.off)
+  marked = new Set()
+  checked = false
+  $('view').innerHTML = `<div class="stack">
+    <div class="card">
+      <div class="row spread">
+        <div>
+          <div class="eyebrow">Lesson ${state.stage + 1} · ${s.title}</div>
+          <h2 style="font-size:19px">${s.ask}</h2>
+        </div>
+        <div class="row">
+          <span class="legend"><span>ES</span><span>Dur</span><span>EF</span>
+            <span style="grid-column:1/4;border-right:0">Task</span>
+            <span>LS</span><span>Float</span><span>LF</span></span>
+          <button class="btn" id="back">Read the lesson again</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="muted">Problem ${Math.min(state.solved + 1, s.problems)} of ${s.problems}</span>
+        <span class="meter"><span id="bar" style="width:${(state.solved / s.problems) * 100}%"></span></span>
+        <span class="muted">${s.off ? 'Whole working days (±1)' : 'Days as points in time'}</span>
+      </div>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="row">
+      ${s.pick ? '<button class="btn primary" id="check">Check the critical path</button>' : ''}
+      <button class="btn" id="skip">Different problem</button>
+      <span id="score" class="muted"></span>
+    </div>
+    <div id="hint"><p>${s.fields.length ? 'Click a box and type your answer. It is marked the moment you leave the box.' : 'Click the name of each task you think has no float.'}</p></div>
+  </div>`
+  drawChart('practice')
+  $('back').onclick = lessonView
+  $('skip').onclick = practiceView
+  if (s.pick) $('check').onclick = checkPath
+  const first = document.querySelector('#chart input')
+  if (first) first.focus()
+  tally()
+  paint()
+}
+
+function doneView () {
+  const s = stage()
+  const last = state.stage === STAGES.length - 1
+  state.view = 'done'
+  $('view').innerHTML = `<div class="stack">
+    <div class="card" style="text-align:center">
+      <div class="done-mark">✓</div>
+      <h2 style="margin-top:10px">${last ? 'Course complete' : 'Lesson ' + (state.stage + 1) + ' complete'}</h2>
+      <div class="prose" style="margin:12px auto 0;text-align:left">
+        <p>${s.takeaway}</p>
+        ${last
+          ? '<p>You have worked every kind of schedule in the course, both ways of counting days. Practise as long as you like — the problems are made fresh each time.</p>'
+          : `<p>Next up: <b>${STAGES[state.stage + 1].title}</b>.</p>`}
+      </div>
+      <div class="row" style="justify-content:center;margin-top:20px">
+        ${last
+          ? '<button class="btn primary" id="again">Practise again</button>'
+          : '<button class="btn primary" id="next">Start the next lesson</button>'}
+      </div>
+    </div>
+  </div>`
+  if (last) $('again').onclick = () => { state.solved = 0; practiceView() }
+  else $('next').onclick = () => { state.stage++; state.solved = 0; lessonView() }
+  paint()
+}
+
+/* ----------------------------- drawing ---------------------------- */
+// Layered layout: long arrows get waypoints in the columns they cross, so they run in the
+// gaps between boxes instead of behind them; rows are reordered to reduce crossings.
+function layout () {
+  const by = R.by, lvl = {}
+  for (const k of R.order) lvl[k] = by[k].pred.length ? Math.max(...by[k].pred.map(p => lvl[p])) + 1 : 0
+  const NL = Math.max(...Object.values(lvl)) + 1
+  const layers = [...Array(NL)].map(() => [])
+  R.order.forEach(k => layers[lvl[k]].push({ id: k, real: true }))
+  const chains = [], up = {}, down = {}
+  for (const u of R.order) {
+    for (const v of by[u].succ) {
+      const ids = [u]
+      for (let l = lvl[u] + 1; l < lvl[v]; l++) {
+        const id = `${u}>${v}#${l}`
+        layers[l].push({ id, real: false })
+        ids.push(id)
+      }
+      ids.push(v)
+      chains.push({ u, v, ids })
+      for (let i = 0; i < ids.length - 1; i++) {
+        ;(down[ids[i]] = down[ids[i]] || []).push(ids[i + 1])
+        ;(up[ids[i + 1]] = up[ids[i + 1]] || []).push(ids[i])
+      }
+    }
+  }
+  const W = 158, H = 116, GX = 92, GY = 30, DH = 14, PAD = 26, idx = {}
+  const place = Ly => Ly.forEach((x, i) => { idx[x.id] = i })
+  layers.forEach(place)
+  const sweep = (ls, nb) => {
+    for (const l of ls) {
+      const Ly = layers[l]
+      Ly.forEach(x => {
+        const n = nb[x.id] || []
+        x.bc = n.length
+          ? n.reduce((s, y) => s + idx[y] / Math.max(1, layers[lvl[y] ?? +y.split('#')[1]].length), 0) / n.length
+          : idx[x.id] / Ly.length
+      })
+      Ly.sort((a, b) => a.bc - b.bc)
+      place(Ly)
+    }
+  }
+  const fwd = [...Array(NL).keys()].slice(1)
+  const back = [...Array(NL).keys()].reverse().slice(1)
+  for (let i = 0; i < 10; i++) { sweep(fwd, up); sweep(back, down) }
+  const colH = Ly => Ly.reduce((s, x) => s + (x.real ? H : DH), 0) + GY * (Ly.length - 1)
+  const totalH = Math.max(...layers.map(colH)) + PAD * 2
+  const pos = {}
+  layers.forEach((Ly, l) => {
+    let y = (totalH - colH(Ly)) / 2
+    Ly.forEach(x => { const h = x.real ? H : DH; pos[x.id] = { x: PAD + l * (W + GX), y, h }; y += h + GY })
+  })
+  return { pos, chains, W, H, totalW: PAD * 2 + NL * (W + GX) - GX, totalH }
+}
+
+const NCOL = 6
+function drawChart (mode) {
+  const s = stage()
+  const { pos, chains, W, H, totalW, totalH } = layout()
+  const board = $('board')
+  board.innerHTML = '<div class="fit"><div id="chart"></div></div>'
+  const chart = $('chart')
+  chart.style.width = totalW + 'px'
+  chart.style.height = totalH + 'px'
+
+  // spread arrow ends along each box's side, ordered by where the other end is
+  const cy = id => pos[id].y + pos[id].h / 2, outP = {}, inP = {}
+  for (const k of R.order) {
+    const outs = chains.filter(e => e.u === k).sort((a, b) => cy(a.ids[1]) - cy(b.ids[1]))
+    outs.forEach((e, i) => { outP[e.u + '>' + e.v] = pos[k].y + H * (.25 + .5 * (i + .5) / outs.length) })
+    const ins = chains.filter(e => e.v === k).sort((a, b) => cy(a.ids[a.ids.length - 2]) - cy(b.ids[b.ids.length - 2]))
+    ins.forEach((e, i) => { inP[e.u + '>' + e.v] = pos[k].y + H * (.25 + .5 * (i + .5) / ins.length) })
+  }
+  let svg = `<svg width="${totalW}" height="${totalH}" aria-hidden="true"><defs>`
+  for (let i = 0; i < NCOL; i++) {
+    svg += `<marker id="ar${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">` +
+      `<path d="M0,0L10,5L0,10z" style="fill:var(--e${i})"/></marker>`
+  }
+  svg += '</defs>'
+  for (const e of chains) {
+    const key = e.u + '>' + e.v, col = R.order.indexOf(e.u) % NCOL
+    const pts = [[pos[e.u].x + W, outP[key]]]
+    e.ids.slice(1, -1).forEach(id => { pts.push([pos[id].x, cy(id)]); pts.push([pos[id].x + W, cy(id)]) })
+    pts.push([pos[e.v].x - 3, inP[key]])
+    let d = `M${pts[0][0]},${pts[0][1]}`
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]
+      if (i % 2 === 0 && i < pts.length - 1) d += ` L${x1},${y1}`
+      else { const m = (x1 - x0) / 2; d += ` C${x0 + m},${y0} ${x1 - m},${y1} ${x1},${y1}` }
+    }
+    svg += `<path class="edge" data-u="${e.u}" data-v="${e.v}" d="${d}" fill="none" ` +
+      `style="stroke:var(--e${col})" stroke-width="2" marker-end="url(#ar${col})"/>`
+  }
+  svg += '</svg>'
+
+  const taught = new Set(s.fields)
+  const cell = (k, f) => {
+    const v = R.by[k][f]
+    if (mode === 'lesson') {
+      return `<div class="cell given${taught.has(f) ? ' teach' : ''}"><span class="lbl">${LABEL[f]}</span>` +
+        `<span class="val">${v}</span></div>`
+    }
+    if (taught.has(f)) {
+      return `<div class="cell"><span class="lbl">${LABEL[f]}</span>` +
+        `<input id="${k}_${f}" data-k="${k}" data-f="${f}" inputmode="numeric" autocomplete="off" ` +
+        `aria-label="${k}, ${NAMES[f]}"></div>`
+    }
+    const known = s.prefilled.has(f)
+    return `<div class="cell ${known ? 'given' : 'blank'}"><span class="lbl">${LABEL[f]}</span>` +
+      `<span class="val">${known ? v : ''}</span></div>`
+  }
+
+  let html = svg
+  for (const k of R.order) {
+    const p = pos[k]
+    html += `<div class="node${mode === 'practice' && s.pick ? ' pickable' : ''}" id="node_${k}" data-node="${k}" ` +
+      `style="left:${p.x}px;top:${p.y}px">` +
+      cell(k, 'es') +
+      `<div class="dur" title="Duration"><span class="lbl">Dur</span><span class="val">${R.by[k].d}</span></div>` +
+      cell(k, 'ef') +
+      `<div class="name" data-name="${k}">${k}</div>` +
+      cell(k, 'ls') + cell(k, 'tf') + cell(k, 'lf') +
+      '</div>'
+  }
+  chart.innerHTML = html
+  size = { w: totalW, h: totalH }
+  fit()
+}
+
+// A wide schedule is scaled down to fit the window rather than scrolled off the edge,
+// down to the point where the numbers would stop being readable.
+let size = null
+function fit () {
+  const board = $('board')
+  if (!size || !board) return
+  const room = board.clientWidth - 18
+  const scale = Math.max(Math.min(1, room / size.w), .62)
+  const chart = $('chart')
+  chart.style.transform = scale < 1 ? `scale(${scale})` : ''
+  const box = board.querySelector('.fit')
+  box.style.width = size.w * scale + 'px'
+  box.style.height = size.h * scale + 'px'
+}
+window.addEventListener('resize', fit)
+
+/* ---------------------------- answering --------------------------- */
+function why (k, f) {
+  const a = R.by[k], one = stage().off
+  switch (f) {
+    case 'es': return a.pred.length
+      ? `${k} cannot begin until <b>every</b> task feeding into it is finished. If one of them finishes later than the others, ${k} waits for that one, so you take the largest earliest finish${one ? ' and add 1' : ''}.`
+      : `Nothing comes before ${k}, so it begins on the first day of the project.`
+    case 'ef': return `Once ${k} starts it runs for its full ${a.d} days, so its earliest finish is its earliest start plus the duration${one ? ', minus 1 because the first day counts as worked' : ''}.`
+    case 'lf': return a.succ.length
+      ? `${k} has to be done in time for <b>every</b> task after it to start on its own latest day. The one that needs to start soonest sets the deadline, so you take the smallest latest start${one ? ' and subtract 1' : ''}.`
+      : `${k} is the last task, so its deadline is the project end date, which is its own earliest finish.`
+    case 'ls': return `Work back from ${k}'s deadline: the latest it can start is its latest finish less the ${a.d} days it takes${one ? ', plus 1' : ''}.`
+    case 'tf': return `Float is slack: how long ${k} could sit idle before the project end date moves. Compare the two starts in its own box.`
   }
 }
-// Zero-day vs one-day rule for each box, for the mix-up warning.
-const RULES={
-  es:[["Start activity","ES = 0","ES = 1"],["After predecessors","ES = largest predecessor EF","ES = largest predecessor EF + 1"]],
-  ef:[["Early finish","EF = ES + Dur","EF = ES + Dur − 1"]],
-  lf:[["Last activity","LF = its EF","LF = its EF"],["Before successors","LF = smallest successor LS","LF = smallest successor LS − 1"]],
-  ls:[["Late start","LS = LF − Dur","LS = LF − Dur + 1"]]
-};
-const MEANING=["In zero-day, numbers are points in time: an activity that ends at 3 hands off at that same moment, so the next one starts at 3. No ±1 needed.",
-  "In one-day, numbers are whole working days: an activity that finishes on day 3 uses up day 3, so the next one starts on day 4. That's why you add or subtract 1."];
-// Did the answer match what you'd get by using the other method's rule?
-function mixup(k,f,v){
-  if(f==="tf")return "";
-  const a=R.by[k],by=R.by,o=off,s=o?-1:1;
-  let wrongRule=null;
-  if(f==="es")wrongRule=a.pred.length?Math.max(...a.pred.map(p=>by[p].ef))+(1-o):1-o;
-  if(f==="ef")wrongRule=a.es+a.d-(1-o);
-  if(f==="lf")wrongRule=a.succ.length?Math.min(...a.succ.map(x=>by[x].ls))-(1-o):null;
-  if(f==="ls")wrongRule=a.lf-a.d+(1-o);
-  if(v!==wrongRule&&v!==R2.by[k][f])return "";
-  const me=o?"one-day":"zero-day",other=o?"zero-day":"one-day";
-  const rows=RULES[f].map(r=>`<tr><td>${r[0]}</td><td${o?"":' class="you"'}>${r[1]}</td><td${o?' class="you"':""}>${r[2]}</td></tr>`).join("").replace(/<tr><td>/g,"<tr><td>");
-  return `<div class="mix"><b>⚠ Zero-day vs one-day mix-up.</b> Your answer is what the <b>${other}</b> rule gives, but you're working in <b>${me}</b> mode.`
-    +`<table><tr><th></th><th>Zero-day</th><th>One-day (±1)</th></tr>${rows}</table>`
-    +`<p style="margin-top:6px">${MEANING[o]}</p></div>`;
-}
-// Plain-English "why" and a textbook definition for each box.
-const WHY={
-  es:k=>R.by[k].pred.length
-    ? `${k} can't begin until <i>every</i> activity feeding into it is finished. If one predecessor finishes later than the others, ${k} has to wait for that one, which is why you take the latest (largest) finish.`
-    : `Nothing comes before ${k}, so it can begin on the very first day of the project.`,
-  ef:k=>`Once ${k} starts, it runs for its full duration. The earliest it can finish is its earliest start pushed forward by how long it takes.`,
-  lf:k=>R.by[k].succ.length
-    ? `${k} must be done in time for <i>every</i> activity after it to start on its latest allowed day. The successor that needs to start soonest sets the deadline, which is why you take the earliest (smallest) late start.`
-    : `${k} is the final activity, so its deadline is the project finish date. On the backward pass, the project finish equals the earliest finish of the last activity.`,
-  ls:k=>`Work backwards from ${k}'s deadline. The latest it can start is its late finish pulled back by how long it takes, without delaying the project.`,
-  tf:k=>`Float is the slack: how many days ${k} can slip before it delays the whole project. If its latest start and earliest start are the same day, there is no slack.`
-};
-const DEF={
-  es:"<b>Early Start (ES):</b> the earliest time an activity can begin, once all of its predecessors are complete. Found on the forward pass.",
-  ef:"<b>Early Finish (EF):</b> the earliest time an activity can be completed. EF = ES + Duration (zero-day) or ES + Duration − 1 (one-day).",
-  lf:"<b>Late Finish (LF):</b> the latest time an activity can be completed without delaying the project end date. Found on the backward pass.",
-  ls:"<b>Late Start (LS):</b> the latest time an activity can begin without delaying the project end date. LS = LF − Duration (zero-day) or LF − Duration + 1 (one-day).",
-  tf:"<b>Total Float (slack):</b> the amount of time an activity can be delayed from its early start without delaying the project completion date. TF = LS − ES = LF − EF. Activities with zero total float are on the critical path."
-};
 
-// Layered layout: long arrows get waypoints in the columns they cross, so they run in the gaps
-// between boxes instead of behind them; rows are reordered to reduce crossings.
-function layout(){
-  const by=R.by,lvl={};
-  for(const k of R.order)lvl[k]=by[k].pred.length?Math.max(...by[k].pred.map(p=>lvl[p]))+1:0;
-  const NL=Math.max(...Object.values(lvl))+1,layers=[...Array(NL)].map(()=>[]);
-  R.order.forEach(k=>layers[lvl[k]].push({id:k,real:true}));
-  const chains=[],up={},down={};
-  for(const u of R.order)for(const v of by[u].succ){const ids=[u];
-    for(let l=lvl[u]+1;l<lvl[v];l++){const id=`${u}>${v}#${l}`;layers[l].push({id,real:false});ids.push(id);}
-    ids.push(v);chains.push({u,v,ids});
-    for(let i=0;i<ids.length-1;i++){(down[ids[i]]=down[ids[i]]||[]).push(ids[i+1]);(up[ids[i+1]]=up[ids[i+1]]||[]).push(ids[i]);}}
-  const W=158,H=120,GX=90,GY=30,DH=14,PAD=24,idx={};
-  const place=Ly=>Ly.forEach((x,i)=>idx[x.id]=i);layers.forEach(place);
-  const sweep=(ls,nb)=>{for(const l of ls){const Ly=layers[l];
-    Ly.forEach(x=>{const n=nb[x.id]||[];x.bc=n.length?n.reduce((s,y)=>s+idx[y]/Math.max(1,layers[lvl[y]??+y.split("#")[1]].length),0)/n.length:idx[x.id]/Ly.length;});
-    Ly.sort((a,b)=>a.bc-b.bc);place(Ly);}};
-  const fwd=[...Array(NL).keys()].slice(1),back=[...Array(NL).keys()].reverse().slice(1);
-  for(let i=0;i<10;i++){sweep(fwd,up);sweep(back,down);}
-  const colH=Ly=>Ly.reduce((s,x)=>s+(x.real?H:DH),0)+GY*(Ly.length-1);
-  const totalH=Math.max(...layers.map(colH))+PAD*2,pos={};
-  layers.forEach((Ly,l)=>{let y=(totalH-colH(Ly))/2;Ly.forEach(x=>{const h=x.real?H:DH;pos[x.id]={x:PAD+l*(W+GX),y,h};y+=h+GY;});});
-  const totalW=PAD*2+NL*(W+GX)-GX;
-  return {pos,chains,W,H,totalW,totalH};
+function pointer (k, f) {
+  const a = R.by[k], one = stage().off
+  const after = ' Make sure the boxes it depends on are green first.'
+  switch (f) {
+    case 'es': return (a.pred.length
+      ? (a.pred.length > 1
+        ? `${k} has more than one task feeding it (${a.pred.join(', ')}). Compare their earliest finishes and take the <b>largest</b>.`
+        : `Look at the earliest finish of ${a.pred[0]}.`) + (one ? ' Then add 1.' : ' Nothing is added.')
+      : `${k} starts the project, so its earliest start is ${one ? '1' : '0'}.`) + after
+    case 'ef': return `Take the earliest start in this box and add the duration${one ? ', then subtract 1' : ''}.` + after
+    case 'lf': return (a.succ.length
+      ? (a.succ.length > 1
+        ? `${k} feeds more than one task (${a.succ.join(', ')}). Compare their latest starts and take the <b>smallest</b>.`
+        : `Look at the latest start of ${a.succ[0]}.`) + (one ? ' Then subtract 1.' : ' Nothing is subtracted.')
+      : `${k} is the last task, so look at its own earliest finish.`) + after
+    case 'ls': return `Take the latest finish in this box and subtract the duration${one ? ', then add 1' : ''}.` + after
+    case 'tf': return 'Subtract the earliest start from the latest start, both in this box.' + after
+  }
 }
 
-const NCOL=6;
-function render(){
-  R=solve(off);R2=solve(1-off);marked.clear();
-  const {pos,chains,W,H,totalW,totalH}=layout(),c=$("chart");
-  c.style.width=totalW+"px";c.style.height=totalH+"px";
-  // spread arrow ends along each box's side, ordered by where the other end is
-  const cy=id=>pos[id].y+pos[id].h/2,outP={},inP={};
-  for(const k of R.order){
-    const outs=chains.filter(e=>e.u===k).sort((a,b)=>cy(a.ids[1])-cy(b.ids[1]));
-    outs.forEach((e,i)=>outP[e.u+">"+e.v]=pos[k].y+H*(.25+.5*(i+.5)/outs.length));
-    const ins=chains.filter(e=>e.v===k).sort((a,b)=>cy(a.ids[a.ids.length-2])-cy(b.ids[b.ids.length-2]));
-    ins.forEach((e,i)=>inP[e.u+">"+e.v]=pos[k].y+H*(.25+.5*(i+.5)/ins.length));}
-  let svg=`<svg width="${totalW}" height="${totalH}"><defs>`;
-  for(let i=0;i<NCOL;i++)svg+=`<marker id="ar${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" style="fill:var(--e${i})"/></marker>`;
-  svg+="</defs>";
-  for(const e of chains){const key=e.u+">"+e.v,col=R.order.indexOf(e.u)%NCOL;
-    const pts=[[pos[e.u].x+W,outP[key]]];
-    e.ids.slice(1,-1).forEach(id=>{pts.push([pos[id].x,cy(id)]);pts.push([pos[id].x+W,cy(id)]);});
-    pts.push([pos[e.v].x-3,inP[key]]);
-    let d=`M${pts[0][0]},${pts[0][1]}`;
-    for(let i=1;i<pts.length;i++){const [x0,y0]=pts[i-1],[x1,y1]=pts[i];
-      if(i%2===0&&i<pts.length-1)d+=` L${x1},${y1}`;else{const m=(x1-x0)/2;d+=` C${x0+m},${y0} ${x1-m},${y1} ${x1},${y1}`;}}
-    svg+=`<path class="edge" data-u="${e.u}" data-v="${e.v}" d="${d}" fill="none" style="stroke:var(--e${col})" stroke-width="2" marker-end="url(#ar${col})"/>`;}
-  svg+="</svg>";
-  let html=svg;
-  for(const k of R.order){const p=pos[k],a=R.by[k];
-    const inp=f=>`<div><span class="lbl">${LABEL[f]}</span><input id="${k}_${f}" data-k="${k}" data-f="${f}" inputmode="numeric" aria-label="${k} ${LABEL[f]}"></div>`;
-    html+=`<div class="node" id="node_${k}" data-node="${k}" style="left:${p.x}px;top:${p.y}px">${inp("es")}<div class="dur" title="Duration"><span class="lbl">Dur</span><span>${a.d}</span></div>${inp("ef")}<div class="name" data-name="${k}" title="Click to mark as critical">${k}</div>${inp("ls")}${inp("tf")}${inp("lf")}</div>`;}
-  c.innerHTML=html;
-  $("hint").className="";$("hint").innerHTML="Click a box to start. Tip: begin with the ES of the first activity. Hover over a box to highlight its arrows.";
-  score();
+const DEF = {
+  es: '<b>Early start (ES)</b> is the soonest a task can begin, once everything feeding it is done.',
+  ef: '<b>Early finish (EF)</b> is the soonest it can be finished: early start plus duration.',
+  lf: '<b>Late finish (LF)</b> is the last moment it can finish without pushing out the project end date.',
+  ls: '<b>Late start (LS)</b> is the last moment it can begin without pushing out the project end date.',
+  tf: '<b>Float</b> is how long a task can be delayed before the project end date moves. Zero float means it is on the critical path.'
 }
-// Highlight the arrows into and out of the box you're pointing at or typing in.
-function focusNode(k){const c=$("chart");c.classList.toggle("focus",!!k);
-  c.querySelectorAll("path.edge").forEach(p=>p.classList.toggle("hi",!!k&&(p.dataset.u===k||p.dataset.v===k)));}
-$("chart").addEventListener("mouseover",e=>{const n=e.target.closest(".node");if(n)focusNode(n.dataset.node);});
-$("chart").addEventListener("mouseleave",()=>focusNode(document.activeElement?.dataset?.k||null));
-$("chart").addEventListener("focusin",e=>{if(e.target.dataset.k)focusNode(e.target.dataset.k);});
+const RULES = {
+  es: [['First task', 'starts at 0', 'starts at 1'], ['After other tasks', 'largest earliest finish', 'largest earliest finish + 1']],
+  ef: [['Earliest finish', 'early start + duration', 'early start + duration − 1']],
+  lf: [['Last task', 'its own earliest finish', 'its own earliest finish'], ['Before other tasks', 'smallest latest start', 'smallest latest start − 1']],
+  ls: [['Latest start', 'late finish − duration', 'late finish − duration + 1']]
+}
+const MEANING = [
+  'Counting days as points in time, a task that ends at 3 hands over at that same moment, so the next one starts at 3 as well. Nothing is added.',
+  'Counting whole working days, a task that finishes on day 3 has used day 3 up, so the next one starts on day 4. That is where the ±1 comes from.'
+]
 
-function grade(el,show){
-  const k=el.dataset.k,f=el.dataset.f,v=el.value.trim();
-  if(v===""){el.className="";return;}
-  const ok=Number(v)===R.by[k][f];el.className=ok?"ok":"bad";
-  if(show){$("hint").className=ok?"ok":"bad";
-    $("hint").innerHTML=ok?`<b>✓ ${k} ${LABEL[f]} = ${v}</b> is correct.`:`<b>✗ ${k} ${LABEL[f]} isn't ${v}. Try again.</b><p style="margin-top:8px"><b>Why:</b> ${WHY[f](k)}</p><p style="margin-top:6px"><b>Hint:</b> ${hint(k,f)}</p>${mixup(k,f,Number(v))}<p class="muted" style="margin-top:6px">${DEF[f]}</p>`;}
-  score();
-}
-function score(){
-  const all=[...document.querySelectorAll("#chart input")];
-  const ok=all.filter(i=>i.className==="ok").length;
-  $("score").textContent=`${ok} of ${all.length} boxes correct`+(ok===all.length?". Every box is right.":"");
+// Did the answer come from the other way of counting days?
+function mixup (k, f, v) {
+  if (f === 'tf' || !RULES[f]) return ''
+  const a = R.by[k], by = R.by, one = stage().off
+  let swapped = null
+  if (f === 'es') swapped = a.pred.length ? Math.max(...a.pred.map(p => by[p].ef)) + (1 - one) : 1 - one
+  if (f === 'ef') swapped = a.es + a.d - (1 - one)
+  if (f === 'lf') swapped = a.succ.length ? Math.min(...a.succ.map(x => by[x].ls)) - (1 - one) : null
+  if (f === 'ls') swapped = a.lf - a.d + (1 - one)
+  if (v !== swapped && v !== other.by[k][f]) return ''
+  const mine = one ? 'whole working days' : 'points in time'
+  const theirs = one ? 'points in time' : 'whole working days'
+  const rows = RULES[f].map(r =>
+    `<tr><td>${r[0]}</td><td${one ? '' : ' class="you"'}>${r[1]}</td><td${one ? ' class="you"' : ''}>${r[2]}</td></tr>`).join('')
+  return `<div class="mix"><b>That is the other way of counting.</b> Your answer is what you get counting in ` +
+    `<b>${theirs}</b>, but this lesson counts in <b>${mine}</b>.` +
+    `<table><tr><th></th><th>Points in time</th><th>Whole days (±1)</th></tr>${rows}</table>` +
+    `<p style="margin-top:8px">${MEANING[one]}</p></div>`
 }
 
-$("chart").addEventListener("change",e=>{if(e.target.matches("input"))grade(e.target,true);});
-$("chart").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("input")){grade(e.target,true);e.target.blur();}});
-$("chart").addEventListener("focusin",e=>{if(!e.target.matches("input")||e.target.className)return;
-  const k=e.target.dataset.k,f=e.target.dataset.f;$("hint").className="";
-  const rule={es:"ES: largest EF of predecessors"+(off?" + 1":"")+" (start activity = "+off+")",ef:"EF = ES + Dur"+(off?" − 1":""),
-    lf:"LF: smallest LS of successors"+(off?" − 1":"")+" (last activity = its EF)",ls:"LS = LF − Dur"+(off?" + 1":""),tf:"Float = LS − ES"}[f];
-  $("hint").innerHTML=`Filling <b>${k} ${LABEL[f]}</b>. Rule: ${rule}.`;});
-$("chart").addEventListener("click",e=>{const n=e.target.dataset.name;if(!n)return;
-  marked.has(n)?marked.delete(n):marked.add(n);$("node_"+n).classList.toggle("marked",marked.has(n));});
+function say (cls, head, body) {
+  const h = $('hint')
+  h.className = cls || ''
+  h.innerHTML = (head ? `<div class="head">${head}</div>` : '') + body
+}
 
-$("checkCP").onclick=()=>{
-  const crit=R.order.filter(k=>R.by[k].tf===0),h=$("hint");
-  const missing=crit.filter(k=>!marked.has(k)),extra=[...marked].filter(k=>R.by[k].tf!==0);
-  if(!missing.length&&!extra.length&&marked.size){h.className="ok";h.innerHTML=`<b>✓ Correct.</b> The critical path is ${crit.join(" → ")}, and the project takes <b>${R.end} days</b>. Every activity on it has zero float.`;return;}
-  h.className="bad";
-  h.innerHTML=`<b>✗ Not quite.</b> `+(extra.length?`At least one activity you marked isn't critical. `:"")
-    +(missing.length?`At least one critical activity isn't marked yet. `:"")
-    +`<p style="margin-top:8px"><b>Why:</b> The critical path is the chain of activities with no slack. If any one of them slips a day, the whole project finishes a day late. Activities with float can slip a little without affecting the end date, so they are not critical.</p>`
-    +`<p class="muted" style="margin-top:6px"><b>Critical path:</b> the longest sequence of dependent activities from project start to finish. It sets the shortest possible project duration, and every activity on it has zero total float.</p>`;
-};
+function grade (el, loud) {
+  const k = el.dataset.k, f = el.dataset.f, raw = el.value.trim()
+  if (raw === '') { el.className = ''; tally(); return }
+  const right = Number(raw) === R.by[k][f]
+  el.className = right ? 'ok' : 'bad'
+  if (loud) {
+    if (right) {
+      say('ok', `✓ ${k} ${NAMES[f]} is ${raw}.`, '')
+      const empty = [...document.querySelectorAll('#chart input')].filter(i => i.value.trim() === '')
+      if (empty.length) empty[0].focus()
+    } else {
+      say('bad', `✗ ${k} ${NAMES[f]} is not ${raw}.`,
+        `<p><b>Why:</b> ${why(k, f)}</p><p><b>Where to look:</b> ${pointer(k, f)}</p>` +
+        mixup(k, f, Number(raw)) + `<p class="muted">${DEF[f]}</p>`)
+    }
+  }
+  tally()
+}
 
-document.querySelectorAll("#mode button").forEach(b=>b.onclick=()=>{off=+b.dataset.m;
-  document.querySelectorAll("#mode button").forEach(x=>x.setAttribute("aria-pressed",x===b));render();});
-$("reset").onclick=render;
-$("example").onclick=()=>{acts=EX;render();};
-$("newp").onclick=()=>{
-  const n=6+Math.floor(Math.random()*3),L=[];
-  for(let i=0;i<n;i++){const name=String.fromCharCode(65+i);let p=[];
-    if(i===1||i===2)p=["A"];
-    else if(i>2){const k=1+(Math.random()<.45?1:0);const pool=[];for(let j=Math.max(1,i-3);j<i;j++)pool.push(j);
-      while(p.length<k&&pool.length)p.push(String.fromCharCode(65+pool.splice(Math.floor(Math.random()*pool.length),1)[0]));}
-    L.push([name,1+Math.floor(Math.random()*8),p.sort().join(",")]);}
-  const used=new Set(L.flatMap(a=>a[2].split(",").filter(Boolean)));
-  const last=L[L.length-1];last[2]=[...new Set([...last[2].split(",").filter(Boolean),...L.slice(0,-1).filter(a=>!used.has(a[0])).map(a=>a[0])])].sort().join(",");
-  acts=L;render();
-};
-// Harder: 10-13 activities, two start activities, merges of up to 3 predecessors, longer durations.
-$("hardp").onclick=()=>{
-  const n=10+Math.floor(Math.random()*4),L=[];
-  for(let i=0;i<n;i++){const name=String.fromCharCode(65+i);let p=[];
-    if(i>=2){const r=Math.random(),k=r<.4?1:r<.8?2:3;const pool=[];for(let j=Math.max(0,i-5);j<i;j++)pool.push(j);
-      while(p.length<k&&pool.length)p.push(String.fromCharCode(65+pool.splice(Math.floor(Math.random()*pool.length),1)[0]));}
-    L.push([name,1+Math.floor(Math.random()*12),p.sort().join(",")]);}
-  const used=new Set(L.flatMap(a=>a[2].split(",").filter(Boolean)));
-  const last=L[L.length-1];last[2]=[...new Set([...last[2].split(",").filter(Boolean),...L.slice(0,-1).filter(a=>!used.has(a[0])).map(a=>a[0])])].sort().join(",");
-  acts=L;render();
-};
-render();
+function tally () {
+  const all = [...document.querySelectorAll('#chart input')]
+  const ok = all.filter(i => i.className === 'ok').length
+  const s = stage()
+  if (all.length) $('score').textContent = `${ok} of ${all.length} boxes right`
+  if (ok === all.length && all.length) {
+    if (s.pick) {
+      if (!checked) say('ok', 'Every box is right.', '<p>Now click the name of each task with no float and check the critical path.</p>')
+    } else finish()
+  }
+}
+
+function checkPath () {
+  const crit = R.critical
+  const missing = crit.filter(k => !marked.has(k))
+  const extra = [...marked].filter(k => R.by[k].tf !== 0)
+  const boxes = [...document.querySelectorAll('#chart input')]
+  if (boxes.some(i => i.className !== 'ok')) {
+    say('bad', 'Fill in every box first.', '<p>The critical path falls out of the float column, so finish the numbers and it will be in front of you.</p>')
+    return
+  }
+  if (!marked.size || missing.length || extra.length) {
+    say('bad', '✗ Not that chain.',
+      (extra.length ? '<p>One of the tasks you marked has float, so the project can absorb a delay there.</p>' : '') +
+      (missing.length ? '<p>A task with no float is still unmarked. Every one of them belongs to the chain.</p>' : '') +
+      '<p class="muted">The critical path is the unbroken run of tasks whose float is 0. It is the longest way through the diagram, and it sets how long the project takes.</p>')
+    return
+  }
+  checked = true
+  finish(`The critical path is <b>${crit.join(' → ')}</b>, and the project takes <b>${R.end} days</b>.`)
+}
+
+function finish (extra) {
+  const s = stage()
+  state.solved++
+  state.total++
+  const more = state.solved < s.problems
+  say('ok', '✓ Solved.', (extra ? `<p>${extra}</p>` : '') +
+    `<p>${more ? `Problem ${state.solved + 1} of ${s.problems} next.` : s.takeaway}</p>` +
+    `<div class="row" style="margin-top:6px"><button class="btn primary" id="on">` +
+    `${more ? 'Next problem' : 'Finish the lesson'}</button></div>`)
+  $('bar').style.width = (state.solved / s.problems) * 100 + '%'
+  document.querySelectorAll('#chart input').forEach(i => { i.disabled = true })
+  $('on').focus()
+  $('on').onclick = () => { if (more) practiceView(); else doneView() }
+  paint()
+}
+
+/* ---------------------------- wiring ------------------------------ */
+document.addEventListener('change', e => { if (e.target.matches('#chart input')) grade(e.target, true) })
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.matches('#chart input')) { e.preventDefault(); grade(e.target, true); e.target.blur() }
+})
+document.addEventListener('mouseover', e => {
+  const n = e.target.closest('#chart .node')
+  if (n) focusNode(n.dataset.node)
+})
+document.addEventListener('focusin', e => { if (e.target.dataset && e.target.dataset.k) focusNode(e.target.dataset.k) })
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]')
+  if (go) {
+    const i = +go.dataset.go
+    if (i <= state.stage) { state.stage = i; state.solved = 0; lessonView() }
+    return
+  }
+  const name = e.target.closest('#chart .name')
+  if (name && state.view === 'practice' && stage().pick) {
+    const k = name.dataset.name
+    marked.has(k) ? marked.delete(k) : marked.add(k)
+    $('node_' + k).classList.toggle('marked', marked.has(k))
+  }
+})
+function focusNode (k) {
+  const c = $('chart')
+  if (!c) return
+  c.classList.toggle('focus', !!k)
+  c.querySelectorAll('path.edge').forEach(p => p.classList.toggle('hi', !!k && (p.dataset.u === k || p.dataset.v === k)))
+}
+$('reset').onclick = () => {
+  state = fresh()
+  save()
+  lessonView()
+}
+
+// Which boxes are already filled in when a lesson only asks for some of them.
+STAGES.forEach(s => {
+  const known = new Set()
+  if (!s.fields.includes('es')) { known.add('es'); known.add('ef') }
+  if (s.fields.includes('tf') || s.id === 'critical') { known.add('ls'); known.add('lf') }
+  if (s.id === 'critical') known.add('tf')
+  if (s.fields.includes('ls')) { known.add('es'); known.add('ef') }
+  s.fields.forEach(f => known.delete(f))
+  s.prefilled = known
+})
+
+load()
+if (state.view === 'practice') practiceView()
+else if (state.view === 'done') doneView()
+else lessonView()
 </script>
 
 </body>

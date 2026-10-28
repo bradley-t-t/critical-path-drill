@@ -1,138 +1,198 @@
-// Launches the real app window, answers every box from the drill's own solver, and checks that
-// the grading, the mix-up warning, the critical-path check and both problem generators all hold up.
+// Walks the whole course in a real app window: reads each lesson, answers every practice
+// problem from the drill's own solver, and checks the marking, the scaffolding, the
+// critical-path check and the saved progress.
 const { app, BrowserWindow } = require('electron')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
 app.disableHardwareAcceleration()
+// Keep the test's own saved progress away from the copy you practise with.
+app.setPath('userData', path.join(app.getPath('temp'), 'critical-path-drill-verify'))
 
-const FILL_AND_CHECK = `(() => {
-  const inputs = [...document.querySelectorAll('#chart input')]
-  for (const el of inputs) {
-    el.value = String(R.by[el.dataset.k][el.dataset.f])
-    el.dispatchEvent(new Event('change', { bubbles: true }))
-  }
-  const crit = R.order.filter(k => R.by[k].tf === 0)
-  for (const k of crit) {
-    document.querySelector('.name[data-name="' + k + '"]')
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  }
-  document.getElementById('checkCP').click()
-  return {
-    activities: R.order.length,
-    boxes: inputs.length,
-    green: document.querySelectorAll('#chart input.ok').length,
-    red: document.querySelectorAll('#chart input.bad').length,
-    score: document.getElementById('score').textContent,
-    hint: document.getElementById('hint').textContent,
-    days: R.end,
-    path: crit.join(' → ')
-  }
-})()`
+const PAGE = path.join(__dirname, '..', 'app', 'index.html')
+const painted = 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))'
 
-const paint = () => 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))'
+const run = (win, code) => win.webContents.executeJavaScript(`(() => { ${code} })()`)
+
+const SNAPSHOT = `return {
+  view: state.view,
+  stage: state.stage,
+  solved: state.solved,
+  total: state.total,
+  heading: document.querySelector('h2') ? document.querySelector('h2').textContent : '',
+  eyebrow: document.querySelector('.eyebrow') ? document.querySelector('.eyebrow').textContent : '',
+  tally: document.getElementById('tally').textContent,
+  inputs: document.querySelectorAll('#chart input').length,
+  blanks: document.querySelectorAll('#chart .cell.blank').length,
+  givens: document.querySelectorAll('#chart .cell.given').length,
+  tasks: R ? R.order.length : 0,
+  rail: [...document.querySelectorAll('.rail button')].map(b => b.dataset.state),
+  hint: document.getElementById('hint') ? document.getElementById('hint').textContent : ''
+}`
 
 async function main () {
   const errors = []
   const win = new BrowserWindow({
-    width: 1280,
-    height: 1000,
+    width: 1340,
+    height: 1040,
     show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
   })
   win.webContents.on('console-message', event => {
     if (event.level === 'error' || event.level === 'warning') errors.push(event.message)
   })
-  win.webContents.on('render-process-gone', (_e, details) => {
-    errors.push('render process gone: ' + details.reason)
-  })
+  win.webContents.on('render-process-gone', (_e, details) => errors.push('render gone: ' + details.reason))
 
-  await win.loadFile(path.join(__dirname, '..', 'app', 'index.html'))
-  await win.webContents.executeJavaScript(paint())
+  await win.loadFile(PAGE)
+  await run(win, "localStorage.clear(); return true")
+  await win.loadFile(PAGE)
+  await win.webContents.executeJavaScript(painted)
 
-  const title = await win.webContents.executeJavaScript('document.querySelector("h1").textContent')
-  assert.equal(title, 'Critical Path Drill')
+  const stages = await run(win, 'return STAGES.map(s => ({ id: s.id, title: s.title, problems: s.problems, pick: s.pick, fields: s.fields.length }))')
+  assert.equal(stages.length, 10, 'the course should have ten lessons')
 
-  // A wrong answer turns the box red, explains itself, and spots the zero-day/one-day mix-up:
-  // a start activity begins on day 0 counting from zero, so 1 is the other method's answer.
-  const wrong = await win.webContents.executeJavaScript(`(() => {
-    const el = document.getElementById('A_es')
-    el.value = '1'
-    el.dispatchEvent(new Event('change', { bubbles: true }))
-    return { cls: el.className, hint: document.getElementById('hint').textContent }
-  })()`)
-  assert.equal(wrong.cls, 'bad')
-  assert.match(wrong.hint, /A ES isn't 1/)
-  assert.match(wrong.hint, /Why:/)
-  assert.match(wrong.hint, /mix-up/)
+  const start = await run(win, SNAPSHOT)
+  assert.equal(start.view, 'lesson')
+  assert.equal(start.stage, 0)
+  assert.deepEqual(start.rail.slice(0, 2), ['now', 'locked'], 'only the first lesson is open to begin with')
+  assert.equal(start.inputs, 0, 'a lesson shows a worked example, not blanks')
+  assert.equal(start.givens, start.tasks * 5, 'every number is filled in on the worked example')
 
-  // Counting from day zero, on the eight-activity example.
-  const zero = await win.webContents.executeJavaScript(FILL_AND_CHECK)
-  assert.equal(zero.activities, 8)
-  assert.equal(zero.boxes, 40)
-  assert.equal(zero.red, 0)
-  assert.equal(zero.green, zero.boxes)
-  assert.match(zero.score, /40 of 40 boxes correct\. Every box is right\./)
-  assert.equal(zero.path, 'A → B → D → G → H')
-  assert.equal(zero.days, 18)
-  assert.match(zero.hint, /^✓ Correct\./)
-  assert.match(zero.hint, /the project takes 18 days/)
+  let solvedAll = 0
 
-  // The same example counted from day one: same chain, same length, every box still graded right.
-  const one = await win.webContents.executeJavaScript(`(() => {
-    document.querySelector('#mode button[data-m="1"]').click()
-    return true
-  })()`).then(() => win.webContents.executeJavaScript(FILL_AND_CHECK))
-  assert.equal(one.red, 0)
-  assert.equal(one.green, one.boxes)
-  assert.equal(one.path, 'A → B → D → G → H')
-  assert.equal(one.days, 18)
-  assert.match(one.hint, /^✓ Correct\./)
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i]
+    const lesson = await run(win, SNAPSHOT)
+    assert.equal(lesson.view, 'lesson', `lesson ${i + 1} should open on its lesson`)
+    assert.equal(lesson.stage, i)
+    assert.equal(lesson.heading, s.title)
+    assert.equal(lesson.eyebrow, `Lesson ${i + 1} of 10`)
 
-  // Both generators, in both counting methods, twenty problems each: every one has to be
-  // solvable and grade clean, so a random problem can never contradict itself.
-  for (const button of ['newp', 'hardp']) {
-    for (const method of ['0', '1']) {
-      for (let i = 0; i < 20; i++) {
-        const r = await win.webContents.executeJavaScript(
-          `(() => { document.querySelector('#mode button[data-m="${method}"]').click()` +
-          `; document.getElementById('${button}').click(); return true })()`
-        ).then(() => win.webContents.executeJavaScript(FILL_AND_CHECK))
-        assert.equal(r.red, 0, `${button} problem ${i + 1} (method ${method}) had a red box`)
-        assert.equal(r.green, r.boxes, `${button} problem ${i + 1} (method ${method}) was not all green`)
-        assert.match(r.hint, /^✓ Correct\./, `${button} problem ${i + 1} (method ${method}) failed the critical-path check`)
-        assert.ok(r.days > 0)
-        if (button === 'hardp') assert.ok(r.activities >= 10, 'harder problems should have at least ten activities')
+    await run(win, "document.getElementById('go').click(); return true")
+    const first = await run(win, SNAPSHOT)
+    assert.equal(first.view, 'practice')
+    assert.equal(first.inputs, first.tasks * s.fields, `lesson ${i + 1} should ask for ${s.fields} boxes per task`)
+    if (s.fields < 5) {
+      assert.ok(first.givens + first.blanks > 0, `lesson ${i + 1} should fill in or grey out the boxes it is not asking for`)
+    }
+
+    for (let p = 0; p < s.problems; p++) {
+      // One wrong answer, to prove the marking and the explanation, then the right ones.
+      if (s.fields > 0) {
+        const bad = await run(win, `
+          const el = document.querySelector('#chart input')
+          el.value = String(R.by[el.dataset.k][el.dataset.f] + 3)
+          el.dispatchEvent(new Event('change', { bubbles: true }))
+          return { cls: el.className, hint: document.getElementById('hint').textContent }`)
+        assert.equal(bad.cls, 'bad', `lesson ${i + 1} should mark a wrong answer`)
+        assert.match(bad.hint, /Why:/)
+        assert.match(bad.hint, /Where to look:/)
       }
+
+      const filled = await run(win, `
+        const ins = [...document.querySelectorAll('#chart input')]
+        for (const el of ins) {
+          el.value = String(R.by[el.dataset.k][el.dataset.f])
+          el.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+        return { boxes: ins.length, green: document.querySelectorAll('#chart input.ok').length,
+                 red: document.querySelectorAll('#chart input.bad').length,
+                 hint: document.getElementById('hint').textContent }`)
+      assert.equal(filled.red, 0, `lesson ${i + 1} problem ${p + 1} had a wrong box after filling in the answers`)
+      assert.equal(filled.green, filled.boxes)
+
+      if (s.pick) {
+        // Marking a task that has slack has to be refused before the right chain is accepted.
+        const slack = await run(win, `
+          const spare = R.order.find(k => R.by[k].tf > 0)
+          document.querySelector('#chart .name[data-name="' + spare + '"]').click()
+          document.getElementById('check').click()
+          const head = document.querySelector('#hint .head').textContent
+          document.querySelector('#chart .name[data-name="' + spare + '"]').click()
+          return head`)
+        assert.match(slack, /Not that chain/, `lesson ${i + 1} accepted a task with float as critical`)
+
+        const good = await run(win, `
+          for (const k of R.critical) document.querySelector('#chart .name[data-name="' + k + '"]').click()
+          document.getElementById('check').click()
+          return { head: document.querySelector('#hint .head').textContent,
+                   body: document.getElementById('hint').textContent,
+                   days: R.end, path: R.critical.join(' \\u2192 ') }`)
+        assert.match(good.head, /Solved/, `lesson ${i + 1} problem ${p + 1} did not accept the critical path`)
+        assert.ok(good.body.includes(good.path), 'the answer should name the chain')
+        assert.ok(good.body.includes(good.days + ' days'), 'the answer should give the project length')
+      } else {
+        const head = await run(win, "return document.querySelector('#hint .head').textContent")
+        assert.match(head, /Solved/, `lesson ${i + 1} problem ${p + 1} was not accepted`)
+      }
+
+      solvedAll++
+      const counted = await run(win, SNAPSHOT)
+      assert.equal(counted.solved, p + 1)
+      assert.equal(counted.total, solvedAll)
+      await run(win, "document.getElementById('on').click(); return true")
+    }
+
+    const done = await run(win, SNAPSHOT)
+    assert.equal(done.view, 'done', `lesson ${i + 1} should end on its summary`)
+    assert.match(done.heading, i === stages.length - 1 ? /Course complete/ : new RegExp(`Lesson ${i + 1} complete`))
+
+    if (i < stages.length - 1) {
+      await run(win, "document.getElementById('next').click(); return true")
+      const rail = await run(win, SNAPSHOT)
+      assert.equal(rail.stage, i + 1)
+      assert.equal(rail.rail[i], 'done', 'a finished lesson should be ticked off')
+      assert.equal(rail.rail[i + 1], 'now', 'the next lesson should open up')
     }
   }
 
-  // Back to the example in a clean state, then save a picture of the window.
-  await win.webContents.executeJavaScript(`(() => {
-    document.querySelector('#mode button[data-m="0"]').click()
-    document.getElementById('example').click()
-    return true
-  })()`)
-  await win.webContents.executeJavaScript(paint())
-  const shot = await win.webContents.capturePage()
-  const out = process.env.CPD_SCREENSHOT
-    ? path.join(__dirname, '..', 'docs', 'screenshot.png')
-    : path.join(__dirname, '..', 'dist', 'verify.png')
-  fs.mkdirSync(path.dirname(out), { recursive: true })
-  fs.writeFileSync(out, shot.toPNG())
+  // Progress survives closing the app.
+  const saved = await run(win, "return localStorage.getItem('critical-path-drill/progress/1')")
+  assert.ok(saved, 'progress should be saved')
+  assert.equal(JSON.parse(saved).total, solvedAll)
+  await win.loadFile(PAGE)
+  await win.webContents.executeJavaScript(painted)
+  const back = await run(win, SNAPSHOT)
+  assert.equal(back.stage, stages.length - 1, 'reopening should come back to the same lesson')
+  assert.equal(back.total, solvedAll, 'reopening should remember how much has been solved')
+
+  // Pictures for the README: the lesson, then a practice problem part way through.
+  if (process.env.CPD_SCREENSHOT) {
+    await run(win, "state.stage = 1; state.solved = 0; state.total = 2; lessonView(); return true")
+    await win.webContents.executeJavaScript(painted)
+    fs.writeFileSync(path.join(__dirname, '..', 'docs', 'lesson.png'), (await win.webContents.capturePage()).toPNG())
+    await run(win, `
+      state.stage = 6; state.solved = 1; state.total = 13; practiceView()
+      const ins = [...document.querySelectorAll('#chart input')]
+      for (const el of ins.slice(0, Math.round(ins.length * 0.45))) {
+        el.value = String(R.by[el.dataset.k][el.dataset.f])
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      const el = ins[ins.length - 1]
+      el.value = String(R.by[el.dataset.k][el.dataset.f] + 2)
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      return true`)
+    await win.webContents.executeJavaScript(painted)
+    fs.writeFileSync(path.join(__dirname, '..', 'docs', 'practice.png'), (await win.webContents.capturePage()).toPNG())
+  }
+
+  // Starting over clears the lot.
+  await win.loadFile(PAGE)
+  await win.webContents.executeJavaScript(painted)
+  await run(win, "document.getElementById('reset').click(); return true")
+  const cleared = await run(win, SNAPSHOT)
+  assert.equal(cleared.stage, 0)
+  assert.equal(cleared.total, 0)
+  assert.equal(cleared.rail[1], 'locked', 'starting over should lock the later lessons again')
 
   assert.deepEqual(errors, [], 'the page logged errors')
 
-  console.log('verify: the window renders, 40 boxes grade correctly in both methods,')
-  console.log('verify: 80 generated problems all solve, and the critical path checks out.')
-  console.log('verify: wrote ' + out)
+  console.log(`verify: ${stages.length} lessons, ${solvedAll} practice problems, every box marked correctly.`)
+  console.log('verify: wrong answers explained, slack rejected as critical, progress saved and cleared.')
 }
 
 app.whenReady()
   .then(main)
   .then(() => app.exit(0))
-  .catch(err => {
-    console.error(err)
-    app.exit(1)
-  })
+  .catch(err => { console.error(err); app.exit(1) })
