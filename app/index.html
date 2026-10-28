@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Critical Path Drill</title>
+<style>
+/* Layout: one column; short instructions, the network chart you type into, a hint panel underneath */
+:root{
+  color-scheme:light;
+  --bg:#f6f7f9; --panel:#ffffff; --fg:#1b2330; --muted:#5d6878; --line:#9aa5b4;
+  --accent:#1f5fbf; --crit:#c0352b; --critbg:#fbe9e7; --ok:#1e7a46; --okbg:#d9f2e3; --bad:#b3261e; --badbg:#fde0dc; --e0:#2463c9;--e1:#c96a00;--e2:#7a3fc4;--e3:#0f8a8a;--e4:#8a5a2b;--e5:#c23b8a;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1b2129; --fg:#e4e8ee; --muted:#9aa5b4; --line:#566273;
+  --accent:#7fb0ff; --crit:#ff8a7a; --critbg:#3a1f1c; --ok:#6fd49a; --okbg:#173325; --bad:#ff8a80; --badbg:#3d1c1a; --e0:#7fb0ff;--e1:#ffb35c;--e2:#c39bff;--e3:#5fd3d3;--e4:#d6a26d;--e5:#ff8ccc; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1b2129; --fg:#e4e8ee; --muted:#9aa5b4; --line:#566273;
+  --accent:#7fb0ff; --crit:#ff8a7a; --critbg:#3a1f1c; --ok:#6fd49a; --okbg:#173325; --bad:#ff8a80; --badbg:#3d1c1a; --e0:#7fb0ff;--e1:#ffb35c;--e2:#c39bff;--e3:#5fd3d3;--e4:#d6a26d;--e5:#ff8ccc; color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+main{max-width:1250px;margin:0 auto;display:grid;gap:14px}
+h1{font-size:22px;margin:0}
+p{margin:0}
+.muted{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;cursor:pointer;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px 12px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+button:focus-visible,input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--bg)}
+.steps{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;font-size:14px}
+.steps ol{margin:4px 0 0;padding-left:20px}
+.wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#chart{position:relative}
+#chart svg{position:absolute;inset:0;pointer-events:none}
+#chart path.edge{transition:opacity .15s}
+#chart.focus path.edge{opacity:.15}
+#chart.focus path.edge.hi{opacity:1;stroke-width:3.5}
+@media (prefers-reduced-motion:reduce){#chart path.edge{transition:none}}
+.node{position:absolute;display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:42px 32px 42px;border:2px solid var(--fg);background:var(--panel)}
+.node>*{border-right:1px solid var(--fg);border-bottom:1px solid var(--fg);display:flex;flex-direction:column;align-items:stretch;justify-content:center;text-align:center;font-variant-numeric:tabular-nums;min-width:0}
+.node .lbl{font-size:10px;line-height:12px;letter-spacing:.04em;color:var(--muted);padding-top:2px;pointer-events:none}
+.node .dur span:last-child{flex:1;display:flex;align-items:center;justify-content:center}
+.node>*:nth-child(3n){border-right:0}
+.node>*:nth-child(n+7){border-bottom:0}
+.node input{width:100%;flex:1;min-height:0;border:0;border-radius:0;text-align:center;font:inherit;font-size:15px;background:transparent;color:var(--fg);padding:0}
+.node input::placeholder{color:var(--muted);font-size:10px;letter-spacing:.04em}
+.node input.ok{background:var(--okbg);color:var(--ok);font-weight:700}
+.node input.bad{background:var(--badbg);color:var(--bad);font-weight:700}
+.node .dur{font-weight:700}
+.node .name{grid-column:1/4;align-items:center;font-weight:700;font-size:16px;cursor:pointer;user-select:none;border-right:0}
+.node.marked{border-color:var(--crit);box-shadow:0 0 0 2px var(--crit)}
+.node.marked .name{background:var(--critbg);color:var(--crit)}
+#hint{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-height:48px}
+#hint.ok{border-color:var(--ok)}
+#hint.bad{border-color:var(--bad)}
+#hint b{font-size:16px}
+#score{font-weight:600}
+.mix{margin-top:10px;padding:10px 12px;border:2px dashed var(--accent);border-radius:6px}
+.mix table{border-collapse:collapse;margin-top:6px;font-size:14px}
+.mix td,.mix th{border:1px solid var(--line);padding:3px 8px;text-align:left}
+.mix tr.you td{font-weight:700;color:var(--accent)}
+.legend{display:inline-grid;grid-template-columns:repeat(3,auto);border:1px solid var(--line);font-size:12px}
+.legend span{padding:2px 8px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center}
+.legend span:nth-child(3n){border-right:0}.legend span:nth-child(n+4){border-bottom:0}
+</style>
+</head>
+<body>
+
+<main>
+  <div>
+    <h1>Critical Path Drill</h1>
+    <p class="muted">Type your answers straight into the boxes. Each one turns green or red when you leave it, and red ones tell you the rule to fix it.</p>
+  </div>
+
+  <div class="row">
+    <span>Method:</span>
+    <div class="seg" id="mode">
+      <button data-m="0" aria-pressed="true">Zero-day (start at 0)</button>
+      <button data-m="1" aria-pressed="false">One-day (start at 1, ±1)</button>
+    </div>
+    <button id="newp">New problem</button>
+    <button id="hardp">Harder problem</button>
+    <button id="example">Video example</button>
+    <button id="reset">Clear answers</button>
+  </div>
+
+  <div class="steps">
+    <div class="row" style="justify-content:space-between">
+      <b>Order to work in</b>
+      <span class="legend"><span>ES</span><span>Dur</span><span>EF</span><span style="grid-column:1/4;border-right:0">Activity</span><span>LS</span><span>Float</span><span>LF</span></span>
+    </div>
+    <ol>
+      <li><b>Forward pass</b> left to right: fill ES and EF in the top row.</li>
+      <li><b>Backward pass</b> right to left: fill LF and LS in the bottom row.</li>
+      <li><b>Float</b> = LS − ES. Zero float means critical.</li>
+      <li><b>Critical path:</b> click the activity names on it, then press Check critical path.</li>
+    </ol>
+  </div>
+
+  <div class="wrap"><div id="chart"></div></div>
+
+  <div class="row">
+    <button class="primary" id="checkCP">Check critical path</button>
+    <span id="score"></span>
+  </div>
+  <div id="hint" aria-live="polite">Click a box to start. Tip: begin with the ES of the first activity.</div>
+</main>
+
+<script>
+const EX=[["A",3,""],["B",4,"A"],["C",5,"A"],["D",8,"B"],["E",5,"C"],["F",4,"C"],["G",1,"D,E"],["H",2,"G,F"]];
+var acts=EX, off=0, R=null, R2=null;
+const marked=new Set();
+const $=id=>document.getElementById(id);
+const FIELDS=["es","ef","ls","tf","lf"];
+const LABEL={es:"ES",ef:"EF",ls:"LS",lf:"LF",tf:"Float"};
+
+function solve(off=window.off){
+  const by={};
+  acts.forEach(([n,d,p])=>by[n]={n,d,pred:p?p.split(","):[],succ:[]});
+  for(const k in by)by[k].pred.forEach(p=>by[p].succ.push(k));
+  const order=Object.keys(by); // activities are listed in dependency order
+  for(const k of order){const a=by[k];a.es=a.pred.length?Math.max(...a.pred.map(p=>by[p].ef))+off:off;a.ef=a.es+a.d-off;}
+  const end=Math.max(...order.map(k=>by[k].ef));
+  for(const k of [...order].reverse()){const a=by[k];a.lf=a.succ.length?Math.min(...a.succ.map(s=>by[s].ls))-off:end;a.ls=a.lf-a.d+off;a.tf=a.ls-a.es;}
+  return {by,order,end};
+}
+
+// Hints name the rule and which boxes to look at, never the answer.
+function hint(k,f){
+  const a=R.by[k],o=off,m=o?"one-day":"zero-day";
+  const chk=" Make sure the boxes it depends on are green first.";
+  switch(f){
+    case "es": return a.pred.length
+      ? (a.pred.length>1?`${k} has more than one predecessor (${a.pred.join(", ")}). Compare their EFs and use the <i>largest</i>, not the smallest.`:`Look at the EF of ${a.pred[0]}.`)+(o?" In the one-day method, add 1.":" In the zero-day method, don't add anything.")+chk
+      : `${k} is a start activity. Think about which day the ${m} method starts on.`;
+    case "ef": return `EF comes from this box's ES and Duration.`+(o?" In the one-day method, remember to subtract 1.":" In the zero-day method, there's no ±1.")+chk;
+    case "lf": return a.succ.length
+      ? (a.succ.length>1?`${k} has more than one successor (${a.succ.join(", ")}). Compare their LSs and use the <i>smallest</i>, not the largest.`:`Look at the LS of ${a.succ[0]}.`)+(o?" In the one-day method, subtract 1.":" In the zero-day method, don't subtract anything.")+chk
+      : `${k} is the last activity. Its LF matches one of the other numbers in its own box.`;
+    case "ls": return `LS comes from this box's LF and Duration, working backwards.`+(o?" In the one-day method, remember to add 1.":" In the zero-day method, there's no ±1.")+chk;
+    case "tf": return `Float compares the late start with the early start in this box.`+chk;
+  }
+}
+// Zero-day vs one-day rule for each box, for the mix-up warning.
+const RULES={
+  es:[["Start activity","ES = 0","ES = 1"],["After predecessors","ES = largest predecessor EF","ES = largest predecessor EF + 1"]],
+  ef:[["Early finish","EF = ES + Dur","EF = ES + Dur − 1"]],
+  lf:[["Last activity","LF = its EF","LF = its EF"],["Before successors","LF = smallest successor LS","LF = smallest successor LS − 1"]],
+  ls:[["Late start","LS = LF − Dur","LS = LF − Dur + 1"]]
+};
+const MEANING=["In zero-day, numbers are points in time: an activity that ends at 3 hands off at that same moment, so the next one starts at 3. No ±1 needed.",
+  "In one-day, numbers are whole working days: an activity that finishes on day 3 uses up day 3, so the next one starts on day 4. That's why you add or subtract 1."];
+// Did the answer match what you'd get by using the other method's rule?
+function mixup(k,f,v){
+  if(f==="tf")return "";
+  const a=R.by[k],by=R.by,o=off,s=o?-1:1;
+  let wrongRule=null;
+  if(f==="es")wrongRule=a.pred.length?Math.max(...a.pred.map(p=>by[p].ef))+(1-o):1-o;
+  if(f==="ef")wrongRule=a.es+a.d-(1-o);
+  if(f==="lf")wrongRule=a.succ.length?Math.min(...a.succ.map(x=>by[x].ls))-(1-o):null;
+  if(f==="ls")wrongRule=a.lf-a.d+(1-o);
+  if(v!==wrongRule&&v!==R2.by[k][f])return "";
+  const me=o?"one-day":"zero-day",other=o?"zero-day":"one-day";
+  const rows=RULES[f].map(r=>`<tr><td>${r[0]}</td><td${o?"":' class="you"'}>${r[1]}</td><td${o?' class="you"':""}>${r[2]}</td></tr>`).join("").replace(/<tr><td>/g,"<tr><td>");
+  return `<div class="mix"><b>⚠ Zero-day vs one-day mix-up.</b> Your answer is what the <b>${other}</b> rule gives, but you're working in <b>${me}</b> mode.`
+    +`<table><tr><th></th><th>Zero-day</th><th>One-day (±1)</th></tr>${rows}</table>`
+    +`<p style="margin-top:6px">${MEANING[o]}</p></div>`;
+}
+// Plain-English "why" and a textbook definition for each box.
+const WHY={
+  es:k=>R.by[k].pred.length
+    ? `${k} can't begin until <i>every</i> activity feeding into it is finished. If one predecessor finishes later than the others, ${k} has to wait for that one, which is why you take the latest (largest) finish.`
+    : `Nothing comes before ${k}, so it can begin on the very first day of the project.`,
+  ef:k=>`Once ${k} starts, it runs for its full duration. The earliest it can finish is its earliest start pushed forward by how long it takes.`,
+  lf:k=>R.by[k].succ.length
+    ? `${k} must be done in time for <i>every</i> activity after it to start on its latest allowed day. The successor that needs to start soonest sets the deadline, which is why you take the earliest (smallest) late start.`
+    : `${k} is the final activity, so its deadline is the project finish date. On the backward pass, the project finish equals the earliest finish of the last activity.`,
+  ls:k=>`Work backwards from ${k}'s deadline. The latest it can start is its late finish pulled back by how long it takes, without delaying the project.`,
+  tf:k=>`Float is the slack: how many days ${k} can slip before it delays the whole project. If its latest start and earliest start are the same day, there is no slack.`
+};
+const DEF={
+  es:"<b>Early Start (ES):</b> the earliest time an activity can begin, once all of its predecessors are complete. Found on the forward pass.",
+  ef:"<b>Early Finish (EF):</b> the earliest time an activity can be completed. EF = ES + Duration (zero-day) or ES + Duration − 1 (one-day).",
+  lf:"<b>Late Finish (LF):</b> the latest time an activity can be completed without delaying the project end date. Found on the backward pass.",
+  ls:"<b>Late Start (LS):</b> the latest time an activity can begin without delaying the project end date. LS = LF − Duration (zero-day) or LF − Duration + 1 (one-day).",
+  tf:"<b>Total Float (slack):</b> the amount of time an activity can be delayed from its early start without delaying the project completion date. TF = LS − ES = LF − EF. Activities with zero total float are on the critical path."
+};
+
+// Layered layout: long arrows get waypoints in the columns they cross, so they run in the gaps
+// between boxes instead of behind them; rows are reordered to reduce crossings.
+function layout(){
+  const by=R.by,lvl={};
+  for(const k of R.order)lvl[k]=by[k].pred.length?Math.max(...by[k].pred.map(p=>lvl[p]))+1:0;
+  const NL=Math.max(...Object.values(lvl))+1,layers=[...Array(NL)].map(()=>[]);
+  R.order.forEach(k=>layers[lvl[k]].push({id:k,real:true}));
+  const chains=[],up={},down={};
+  for(const u of R.order)for(const v of by[u].succ){const ids=[u];
+    for(let l=lvl[u]+1;l<lvl[v];l++){const id=`${u}>${v}#${l}`;layers[l].push({id,real:false});ids.push(id);}
+    ids.push(v);chains.push({u,v,ids});
+    for(let i=0;i<ids.length-1;i++){(down[ids[i]]=down[ids[i]]||[]).push(ids[i+1]);(up[ids[i+1]]=up[ids[i+1]]||[]).push(ids[i]);}}
+  const W=158,H=120,GX=90,GY=30,DH=14,PAD=24,idx={};
+  const place=Ly=>Ly.forEach((x,i)=>idx[x.id]=i);layers.forEach(place);
+  const sweep=(ls,nb)=>{for(const l of ls){const Ly=layers[l];
+    Ly.forEach(x=>{const n=nb[x.id]||[];x.bc=n.length?n.reduce((s,y)=>s+idx[y]/Math.max(1,layers[lvl[y]??+y.split("#")[1]].length),0)/n.length:idx[x.id]/Ly.length;});
+    Ly.sort((a,b)=>a.bc-b.bc);place(Ly);}};
+  const fwd=[...Array(NL).keys()].slice(1),back=[...Array(NL).keys()].reverse().slice(1);
+  for(let i=0;i<10;i++){sweep(fwd,up);sweep(back,down);}
+  const colH=Ly=>Ly.reduce((s,x)=>s+(x.real?H:DH),0)+GY*(Ly.length-1);
+  const totalH=Math.max(...layers.map(colH))+PAD*2,pos={};
+  layers.forEach((Ly,l)=>{let y=(totalH-colH(Ly))/2;Ly.forEach(x=>{const h=x.real?H:DH;pos[x.id]={x:PAD+l*(W+GX),y,h};y+=h+GY;});});
+  const totalW=PAD*2+NL*(W+GX)-GX;
+  return {pos,chains,W,H,totalW,totalH};
+}
+
+const NCOL=6;
+function render(){
+  R=solve(off);R2=solve(1-off);marked.clear();
+  const {pos,chains,W,H,totalW,totalH}=layout(),c=$("chart");
+  c.style.width=totalW+"px";c.style.height=totalH+"px";
+  // spread arrow ends along each box's side, ordered by where the other end is
+  const cy=id=>pos[id].y+pos[id].h/2,outP={},inP={};
+  for(const k of R.order){
+    const outs=chains.filter(e=>e.u===k).sort((a,b)=>cy(a.ids[1])-cy(b.ids[1]));
+    outs.forEach((e,i)=>outP[e.u+">"+e.v]=pos[k].y+H*(.25+.5*(i+.5)/outs.length));
+    const ins=chains.filter(e=>e.v===k).sort((a,b)=>cy(a.ids[a.ids.length-2])-cy(b.ids[b.ids.length-2]));
+    ins.forEach((e,i)=>inP[e.u+">"+e.v]=pos[k].y+H*(.25+.5*(i+.5)/ins.length));}
+  let svg=`<svg width="${totalW}" height="${totalH}"><defs>`;
+  for(let i=0;i<NCOL;i++)svg+=`<marker id="ar${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" style="fill:var(--e${i})"/></marker>`;
+  svg+="</defs>";
+  for(const e of chains){const key=e.u+">"+e.v,col=R.order.indexOf(e.u)%NCOL;
+    const pts=[[pos[e.u].x+W,outP[key]]];
+    e.ids.slice(1,-1).forEach(id=>{pts.push([pos[id].x,cy(id)]);pts.push([pos[id].x+W,cy(id)]);});
+    pts.push([pos[e.v].x-3,inP[key]]);
+    let d=`M${pts[0][0]},${pts[0][1]}`;
+    for(let i=1;i<pts.length;i++){const [x0,y0]=pts[i-1],[x1,y1]=pts[i];
+      if(i%2===0&&i<pts.length-1)d+=` L${x1},${y1}`;else{const m=(x1-x0)/2;d+=` C${x0+m},${y0} ${x1-m},${y1} ${x1},${y1}`;}}
+    svg+=`<path class="edge" data-u="${e.u}" data-v="${e.v}" d="${d}" fill="none" style="stroke:var(--e${col})" stroke-width="2" marker-end="url(#ar${col})"/>`;}
+  svg+="</svg>";
+  let html=svg;
+  for(const k of R.order){const p=pos[k],a=R.by[k];
+    const inp=f=>`<div><span class="lbl">${LABEL[f]}</span><input id="${k}_${f}" data-k="${k}" data-f="${f}" inputmode="numeric" aria-label="${k} ${LABEL[f]}"></div>`;
+    html+=`<div class="node" id="node_${k}" data-node="${k}" style="left:${p.x}px;top:${p.y}px">${inp("es")}<div class="dur" title="Duration"><span class="lbl">Dur</span><span>${a.d}</span></div>${inp("ef")}<div class="name" data-name="${k}" title="Click to mark as critical">${k}</div>${inp("ls")}${inp("tf")}${inp("lf")}</div>`;}
+  c.innerHTML=html;
+  $("hint").className="";$("hint").innerHTML="Click a box to start. Tip: begin with the ES of the first activity. Hover over a box to highlight its arrows.";
+  score();
+}
+// Highlight the arrows into and out of the box you're pointing at or typing in.
+function focusNode(k){const c=$("chart");c.classList.toggle("focus",!!k);
+  c.querySelectorAll("path.edge").forEach(p=>p.classList.toggle("hi",!!k&&(p.dataset.u===k||p.dataset.v===k)));}
+$("chart").addEventListener("mouseover",e=>{const n=e.target.closest(".node");if(n)focusNode(n.dataset.node);});
+$("chart").addEventListener("mouseleave",()=>focusNode(document.activeElement?.dataset?.k||null));
+$("chart").addEventListener("focusin",e=>{if(e.target.dataset.k)focusNode(e.target.dataset.k);});
+
+function grade(el,show){
+  const k=el.dataset.k,f=el.dataset.f,v=el.value.trim();
+  if(v===""){el.className="";return;}
+  const ok=Number(v)===R.by[k][f];el.className=ok?"ok":"bad";
+  if(show){$("hint").className=ok?"ok":"bad";
+    $("hint").innerHTML=ok?`<b>✓ ${k} ${LABEL[f]} = ${v}</b> is correct.`:`<b>✗ ${k} ${LABEL[f]} isn't ${v}. Try again.</b><p style="margin-top:8px"><b>Why:</b> ${WHY[f](k)}</p><p style="margin-top:6px"><b>Hint:</b> ${hint(k,f)}</p>${mixup(k,f,Number(v))}<p class="muted" style="margin-top:6px">${DEF[f]}</p>`;}
+  score();
+}
+function score(){
+  const all=[...document.querySelectorAll("#chart input")];
+  const ok=all.filter(i=>i.className==="ok").length;
+  $("score").textContent=`${ok} of ${all.length} boxes correct`+(ok===all.length?". Every box is right.":"");
+}
+
+$("chart").addEventListener("change",e=>{if(e.target.matches("input"))grade(e.target,true);});
+$("chart").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("input")){grade(e.target,true);e.target.blur();}});
+$("chart").addEventListener("focusin",e=>{if(!e.target.matches("input")||e.target.className)return;
+  const k=e.target.dataset.k,f=e.target.dataset.f;$("hint").className="";
+  const rule={es:"ES: largest EF of predecessors"+(off?" + 1":"")+" (start activity = "+off+")",ef:"EF = ES + Dur"+(off?" − 1":""),
+    lf:"LF: smallest LS of successors"+(off?" − 1":"")+" (last activity = its EF)",ls:"LS = LF − Dur"+(off?" + 1":""),tf:"Float = LS − ES"}[f];
+  $("hint").innerHTML=`Filling <b>${k} ${LABEL[f]}</b>. Rule: ${rule}.`;});
+$("chart").addEventListener("click",e=>{const n=e.target.dataset.name;if(!n)return;
+  marked.has(n)?marked.delete(n):marked.add(n);$("node_"+n).classList.toggle("marked",marked.has(n));});
+
+$("checkCP").onclick=()=>{
+  const crit=R.order.filter(k=>R.by[k].tf===0),h=$("hint");
+  const missing=crit.filter(k=>!marked.has(k)),extra=[...marked].filter(k=>R.by[k].tf!==0);
+  if(!missing.length&&!extra.length&&marked.size){h.className="ok";h.innerHTML=`<b>✓ Correct.</b> The critical path is ${crit.join(" → ")}, and the project takes <b>${R.end} days</b>. Every activity on it has zero float.`;return;}
+  h.className="bad";
+  h.innerHTML=`<b>✗ Not quite.</b> `+(extra.length?`At least one activity you marked isn't critical. `:"")
+    +(missing.length?`At least one critical activity isn't marked yet. `:"")
+    +`<p style="margin-top:8px"><b>Why:</b> The critical path is the chain of activities with no slack. If any one of them slips a day, the whole project finishes a day late. Activities with float can slip a little without affecting the end date, so they are not critical.</p>`
+    +`<p class="muted" style="margin-top:6px"><b>Critical path:</b> the longest sequence of dependent activities from project start to finish. It sets the shortest possible project duration, and every activity on it has zero total float.</p>`;
+};
+
+document.querySelectorAll("#mode button").forEach(b=>b.onclick=()=>{off=+b.dataset.m;
+  document.querySelectorAll("#mode button").forEach(x=>x.setAttribute("aria-pressed",x===b));render();});
+$("reset").onclick=render;
+$("example").onclick=()=>{acts=EX;render();};
+$("newp").onclick=()=>{
+  const n=6+Math.floor(Math.random()*3),L=[];
+  for(let i=0;i<n;i++){const name=String.fromCharCode(65+i);let p=[];
+    if(i===1||i===2)p=["A"];
+    else if(i>2){const k=1+(Math.random()<.45?1:0);const pool=[];for(let j=Math.max(1,i-3);j<i;j++)pool.push(j);
+      while(p.length<k&&pool.length)p.push(String.fromCharCode(65+pool.splice(Math.floor(Math.random()*pool.length),1)[0]));}
+    L.push([name,1+Math.floor(Math.random()*8),p.sort().join(",")]);}
+  const used=new Set(L.flatMap(a=>a[2].split(",").filter(Boolean)));
+  const last=L[L.length-1];last[2]=[...new Set([...last[2].split(",").filter(Boolean),...L.slice(0,-1).filter(a=>!used.has(a[0])).map(a=>a[0])])].sort().join(",");
+  acts=L;render();
+};
+// Harder: 10-13 activities, two start activities, merges of up to 3 predecessors, longer durations.
+$("hardp").onclick=()=>{
+  const n=10+Math.floor(Math.random()*4),L=[];
+  for(let i=0;i<n;i++){const name=String.fromCharCode(65+i);let p=[];
+    if(i>=2){const r=Math.random(),k=r<.4?1:r<.8?2:3;const pool=[];for(let j=Math.max(0,i-5);j<i;j++)pool.push(j);
+      while(p.length<k&&pool.length)p.push(String.fromCharCode(65+pool.splice(Math.floor(Math.random()*pool.length),1)[0]));}
+    L.push([name,1+Math.floor(Math.random()*12),p.sort().join(",")]);}
+  const used=new Set(L.flatMap(a=>a[2].split(",").filter(Boolean)));
+  const last=L[L.length-1];last[2]=[...new Set([...last[2].split(",").filter(Boolean),...L.slice(0,-1).filter(a=>!used.has(a[0])).map(a=>a[0])])].sort().join(",");
+  acts=L;render();
+};
+render();
+</script>
+
+</body>
+</html>

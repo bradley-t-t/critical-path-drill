@@ -1,0 +1,52 @@
+{
+  "name": "critical-path-drill",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop practice sheet for working out a project schedule by hand",
+  "license": "MIT",
+  "author": "Trenton Taylor",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "verify": "electron test/verify.js",
+    "icon": "python3 scripts/make-icon.py",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.taylorurl.criticalpathdrill",
+    "productName": "Critical Path Drill",
+    "copyright": "Copyright © 2026 Trenton Taylor",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "publish": null,
+    "mac": {
+      "category": "public.app-category.education",
+      "identity": null,
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
