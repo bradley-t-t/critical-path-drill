@@ -222,15 +222,22 @@ function oneChain (r) {
   return c.length > 1
 }
 
+// Two passes. Asking for a second task with slack reads better on a float lesson, but a
+// shape with one pair of parallel tasks can never have two, so the first pass runs out
+// every time and the second drops that. Without it those stages fell through to a raw
+// schedule and one in eight had no slack at all, in the lesson about slack.
 function problemFor (stage) {
-  for (let i = 0; i < 400; i++) {
-    const acts = SHAPES[stage.shape]()
-    const r = solve(acts, stage.off)
-    if (!r.order.some(k => r.by[k].tf > 0)) continue          // a problem with no slack teaches nothing
-    if (!oneChain(r)) continue
-    if (stage.fields.includes('tf') && r.order.filter(k => r.by[k].tf > 0).length < 2) continue
-    return acts
+  for (const least of [2, 1]) {
+    for (let i = 0; i < 400; i++) {
+      const acts = SHAPES[stage.shape]()
+      const r = solve(acts, stage.off)
+      if (!r.order.some(k => r.by[k].tf > 0)) continue        // a problem with no slack teaches nothing
+      if (!oneChain(r)) continue
+      if (stage.fields.includes('tf') && r.order.filter(k => r.by[k].tf > 0).length < least) continue
+      return acts
+    }
   }
+  // Only a straight line gets here, where no task has slack and none of the above applies.
   return SHAPES[stage.shape]()
 }
 
