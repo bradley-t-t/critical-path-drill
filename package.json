@@ -10,7 +10,8 @@
     "start": "electron .",
     "verify": "electron test/verify.js",
     "icon": "python3 scripts/make-icon.py",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "dist:all": "electron-builder --mac --arm64 --x64"
   },
   "devDependencies": {
     "electron": "45.1.0",
@@ -34,13 +35,7 @@
       "category": "public.app-category.education",
       "identity": null,
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
+        "dmg"
       ]
     },
     "win": {

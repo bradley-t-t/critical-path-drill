@@ -59,9 +59,10 @@ file in a browser works too.
 ## Build and test
 
 ```
-npm run verify   # walks the whole course in a real window and checks every answer and hint
-npm run dist     # installers for this computer, into dist/
-npm run icon     # redraws build/icon.png
+npm run verify     # walks the whole course in a real window and checks every answer and hint
+npm run dist       # one build, for this computer, into dist/
+npm run dist:all   # both Mac builds, Apple silicon and Intel, as the release does
+npm run icon       # redraws build/icon.png
 ```
 
 Pushes to `main` and every pull request build and test on both a Mac and a Windows runner.
