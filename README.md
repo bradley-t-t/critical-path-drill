@@ -25,9 +25,9 @@ Download the latest build from
 
 - **Mac:** open the `.dmg` and drag the app to Applications. It isn't signed by Apple, so the
   first time, right-click the app and choose **Open**, then **Open** again.
-- **Windows:** run the `.exe`. The portable one runs straight from the file; the installer
-  puts it in the Start menu. Windows SmartScreen will warn about an unknown publisher, so
-  choose **More info** then **Run anyway**.
+- **Windows:** take either `.exe`. The one marked *portable* runs straight from the file with
+  nothing to install; the one marked *setup* installs it and puts it in the Start menu. Windows
+  SmartScreen will warn about an unknown publisher, so choose **More info** then **Run anyway**.
 
 ## What you work through
 
