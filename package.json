@@ -1,6 +1,6 @@
 {
   "name": "critical-path-drill",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "A ten-lesson desktop course on working out a project schedule by hand",
   "license": "MIT",
