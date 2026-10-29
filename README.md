@@ -5,11 +5,12 @@ Mac and Windows. Ten lessons, each one a page of plain explanation and then prac
 you answer in the diagram itself. It starts with a single line of three tasks and ends with
 exam-sized schedules counted in whole working days.
 
-Every task sits in a box with six blanks: the earliest it can start and finish, the latest it
-can start and finish, and how much slack it has. You type your answers in, and each blank is
-marked the moment you leave it. A wrong one explains why the number works the way it does and
-which boxes to look at, without handing you the answer. Early on the boxes a lesson has not
-covered yet stay greyed out, so you are only ever asked for the one idea you just read about.
+Every task sits in a box with the duration given and five blanks: the earliest it can start and
+finish, the latest it can start and finish, and how much slack it has. You type your answers in,
+and each blank is marked the moment you leave it. A wrong one explains why the number works the
+way it does and which boxes to look at, without handing you the answer. Early on the boxes a
+lesson has not covered yet stay greyed out, so you are only ever asked for the one idea you just
+read about.
 
 Your place in the course is saved as you go, so closing the app and coming back picks up where
 you left off.
@@ -42,9 +43,9 @@ Download the latest build from
 9. Counting whole working days, where every rule gains or loses a day.
 10. Exam pace: big schedules in whole working days, three in a row.
 
-Each lesson hands you fresh problems, so you can repeat one as often as you like and never get
-the same schedule twice. The number buttons along the top jump back to any lesson you have
-finished, and the link at the bottom right starts the course over.
+Each lesson builds a new schedule for every problem, so you can repeat one as often as you like.
+The number buttons along the top jump back to any lesson you have finished, and the link at the
+bottom right starts the course over.
 
 ## Run it from source
 
